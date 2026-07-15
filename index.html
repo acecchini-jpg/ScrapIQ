@@ -814,6 +814,27 @@ const Supa = {
       if (raw) this.cfg = { ...this.cfg, ...JSON.parse(raw) };
     } catch(e) {}
   },
+
+  // v11.8b: lê ./config.json (deploy compartilhado — ex: GitHub Pages).
+  // Precedência: url/key do arquivo SEMPRE vencem (permite rotacionar a chave
+  // editando só o JSON). 'enabled': auto-ativa na primeira visita (sem config
+  // local); respeita a escolha do usuário se ele já desativou manualmente.
+  _cfgFromFile: false,
+  async loadRemoteCfg() {
+    try {
+      const r = await fetch('./config.json', { cache: 'no-store' });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (j && j.url && j.key) {
+        const hadLocal = (() => { try { return !!localStorage.getItem('scrapiq-supa-cfg'); } catch(e) { return false; } })();
+        this.cfg.url = String(j.url).trim();
+        this.cfg.key = String(j.key).trim();
+        if (!hadLocal) this.cfg.enabled = true;          // primeira visita: liga direto
+        if (j.forceEnabled === true) this.cfg.enabled = true; // override opcional do admin
+        this._cfgFromFile = true;
+      }
+    } catch(e) { /* file:// ou sem config.json → segue fluxo local normal */ }
+  },
   saveCfg() {
     try { localStorage.setItem('scrapiq-supa-cfg', JSON.stringify(this.cfg)); } catch(e) {}
   },
@@ -1429,7 +1450,7 @@ function parseOcorrenciasWorkbook(wb) {
     }
   }
 
-  //console.log(results);
+  console.log(results);
   return results;
 }
 
@@ -2990,10 +3011,16 @@ const UI = {
 
   // ═══ SUPABASE (v11.8) ═══
   supaInitUI() {
-    Supa.loadCfg();
+    // Nota: NÃO rechama Supa.loadCfg() aqui — o boot já resolveu a precedência
+    // (localStorage → config.json). Rechamar sobrescreveria os valores do arquivo.
     const u = document.getElementById('supa-url'), k = document.getElementById('supa-key');
     if (u) u.value = Supa.cfg.url || '';
     if (k) k.value = Supa.cfg.key || '';
+    // Indica quando a config veio do config.json do deploy
+    if (Supa._cfgFromFile) {
+      const msg = document.getElementById('supa-msg');
+      if (msg) { msg.textContent = I18n.t('supa.msg.fromfile'); msg.style.color = 'var(--accent)'; }
+    }
     this.supaUpdateBadge();
   },
 
@@ -4351,7 +4378,7 @@ const I18n = {
       'supa.msg.fill':'Preencha URL e chave anon','supa.msg.testing':'Testando conexão...','supa.msg.loading':'Carregando dados...',
       'supa.msg.ok':'✓ Conexão OK — tabela encontrada','supa.msg.fail':'Falha na conexão',
       'supa.msg.nolocal':'Nenhum dado local para migrar','supa.msg.confirm':'Enviar {n} registros locais para a nuvem?\n\nRegistros já existentes na nuvem serão atualizados (upsert).',
-      'supa.msg.migrating':'Migrando dados para a nuvem...','supa.msg.migrated':'✓ {n} registros migrados para a nuvem'
+      'supa.msg.migrating':'Migrando dados para a nuvem...','supa.msg.migrated':'✓ {n} registros migrados para a nuvem','supa.msg.fromfile':'⚙ Configuração carregada do config.json do site'
     },
     en: {
       'tab.dashboard':'Dashboard','tab.dasheq':'By Equipment','tab.pdm':'PDM Summary','tab.import':'Import Data','tab.config':'Settings',
@@ -4425,7 +4452,7 @@ const I18n = {
       'supa.msg.fill':'Fill in URL and anon key','supa.msg.testing':'Testing connection...','supa.msg.loading':'Loading data...',
       'supa.msg.ok':'✓ Connection OK — table found','supa.msg.fail':'Connection failed',
       'supa.msg.nolocal':'No local data to migrate','supa.msg.confirm':'Send {n} local records to the cloud?\n\nExisting cloud records will be updated (upsert).',
-      'supa.msg.migrating':'Migrating data to the cloud...','supa.msg.migrated':'✓ {n} records migrated to the cloud'
+      'supa.msg.migrating':'Migrating data to the cloud...','supa.msg.migrated':'✓ {n} records migrated to the cloud','supa.msg.fromfile':'⚙ Configuration loaded from the site config.json'
     },
     es: {
       'tab.dashboard':'Dashboard','tab.dasheq':'Por Equipo','tab.pdm':'Resumen PDM','tab.import':'Importar Datos','tab.config':'Configuración',
@@ -4499,7 +4526,7 @@ const I18n = {
       'supa.msg.fill':'Complete URL y clave anon','supa.msg.testing':'Probando conexión...','supa.msg.loading':'Cargando datos...',
       'supa.msg.ok':'✓ Conexión OK — tabla encontrada','supa.msg.fail':'Fallo de conexión',
       'supa.msg.nolocal':'Sin datos locales para migrar','supa.msg.confirm':'¿Enviar {n} registros locales a la nube?\n\nLos registros existentes en la nube serán actualizados (upsert).',
-      'supa.msg.migrating':'Migrando datos a la nube...','supa.msg.migrated':'✓ {n} registros migrados a la nube'
+      'supa.msg.migrating':'Migrando datos a la nube...','supa.msg.migrated':'✓ {n} registros migrados a la nube','supa.msg.fromfile':'⚙ Configuración cargada del config.json del sitio'
     }
   },
 
@@ -5123,7 +5150,8 @@ const PDM = {
 // ═══════════════════════════════
 async function boot() {
   I18n.init();
-  Supa.loadCfg();       // v11.8: carrega config da nuvem ANTES do loadAll
+  Supa.loadCfg();            // 1) config local (localStorage)
+  await Supa.loadRemoteCfg(); // 2) config.json do deploy (se existir, url/key vencem)
   UI.supaInitUI();
   UI.spin('Iniciando...');
   UI._applyStoredTheme();
