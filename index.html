@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v11.8 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v11.9 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -165,7 +165,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v11.8</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v11.9</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -425,25 +425,6 @@ main{flex:1;display:flex;flex-direction:column}
 
     <div class="card">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-        <div style="width:30px;height:30px;border-radius:7px;background:rgba(79,124,255,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4f7cff" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg>
-        </div>
-        <div>
-          <div class="ff" style="font-weight:700;font-size:13px" data-i18n="import.cost.title">Área A — Matriz de Custo</div>
-          <div style="font-size:11px;color:var(--text-muted)" data-i18n="import.cost.desc">Col A: Código · Col B: Descrição · Col E: Custo</div>
-        </div>
-      </div>
-      <div class="drop-zone" id="drop-cost" ondragover="UI.dragOver(event,'drop-cost')" ondragleave="UI.dragLeave('drop-cost')" ondrop="UI.drop(event,'cost')">
-        <input type="file" accept=".xlsx,.xls,.csv" onchange="UI.fileInput(event,'cost')">
-        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 8px;color:var(--text-muted)"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-        <div style="font-weight:600;font-size:13px;margin-bottom:3px" data-i18n="import.drag">Arraste ou clique</div>
-        <div style="color:var(--text-muted);font-size:11px" data-i18n="import.cost.over">Sobrescreve base de custos existente</div>
-      </div>
-      <div id="cost-msg" style="margin-top:10px;font-size:12px;color:var(--text-muted)"></div>
-    </div>
-
-    <div class="card">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
         <div style="width:30px;height:30px;border-radius:7px;background:rgba(34,201,151,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#22c997" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
         </div>
@@ -460,10 +441,6 @@ main{flex:1;display:flex;flex-direction:column}
       </div>
       <div id="scrap-msg" style="margin-top:10px;font-size:12px;color:var(--text-muted)"></div>
     </div>
-  </div>
-
-  <div style="max-width:900px;margin-top:18px">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
 
     <div class="card">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
@@ -482,6 +459,29 @@ main{flex:1;display:flex;flex-direction:column}
         <div style="color:var(--text-muted);font-size:11px" data-i18n="import.ocorr.acc">Acumula plano de produção diário — acrescenta registros</div>
       </div>
       <div id="ocorr-msg" style="margin-top:10px;font-size:12px;color:var(--text-muted)"></div>
+    </div>
+  </div>
+
+  <div style="max-width:900px;margin-top:18px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div style="width:30px;height:30px;border-radius:7px;background:rgba(79,124,255,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4f7cff" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg>
+        </div>
+        <div>
+          <div class="ff" style="font-weight:700;font-size:13px" data-i18n="import.cost.title">Área A — Matriz de Custo</div>
+          <div style="font-size:11px;color:var(--text-muted)" data-i18n="import.cost.desc">Col A: Código · Col B: Descrição · Col E: Custo</div>
+        </div>
+      </div>
+      <div class="drop-zone" id="drop-cost" ondragover="UI.dragOver(event,'drop-cost')" ondragleave="UI.dragLeave('drop-cost')" ondrop="UI.drop(event,'cost')">
+        <input type="file" accept=".xlsx,.xls,.csv" onchange="UI.fileInput(event,'cost')">
+        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 8px;color:var(--text-muted)"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+        <div style="font-weight:600;font-size:13px;margin-bottom:3px" data-i18n="import.drag">Arraste ou clique</div>
+        <div style="color:var(--text-muted);font-size:11px" data-i18n="import.cost.over">Sobrescreve base de custos existente</div>
+      </div>
+      <div id="cost-msg" style="margin-top:10px;font-size:12px;color:var(--text-muted)"></div>
     </div>
 
     <div class="card">
@@ -874,6 +874,7 @@ const Supa = {
     if (store === 'costs')   return String(item.materialCode);
     if (store === 'scrap')   return String(item.id);
     if (store === 'aliases') return String(item.code);
+    if (store === 'goals')   return 'global';   // v11.9: meta única compartilhada
     // ocorrencias: mesma chave composta usada no dedup local
     return this._hash(`${item.data}|${item.turno}|${item.codigoProduto}|${item.planoProducao}|${item.comentario}`);
   },
@@ -1374,6 +1375,7 @@ function parseScrapRows(rows) {
 function parseOcorrenciasWorkbook(wb) {
   const TARGET_SHEETS = ['1T', '2T', '3T'];
   const results = [];
+  const sheetDates = {};   // v11.9: F1 por aba, para validação de consistência
 
   for (const sheetName of TARGET_SHEETS) {
     if (!wb.SheetNames.includes(sheetName)) continue;
@@ -1408,6 +1410,7 @@ function parseOcorrenciasWorkbook(wb) {
         dataStr = parsedW ? isoDate(parsedW) : cellF1.w.trim();
       }
     }
+    sheetDates[sheetName] = dataStr;   // v11.9: registra F1 desta aba
 
     // ── TURNO: acesso direto à célula F2 pelo endereço A1 ─────────
     let turno = sheetName;
@@ -1447,6 +1450,19 @@ function parseOcorrenciasWorkbook(wb) {
         planoProducao: planoProducao,
         comentario:    comentario
       });
+    }
+  }
+
+  // ── VALIDAÇÃO v11.9: F1 (data) deve ser IGUAL em todas as abas presentes ──
+  const dateEntries = Object.entries(sheetDates);
+  if (dateEntries.length > 1) {
+    const uniqueDates = [...new Set(dateEntries.map(([, d]) => d))];
+    if (uniqueDates.length > 1) {
+      const detail = dateEntries.map(([s, d]) => `  • Aba ${s}: F1 = ${d}`).join('\n');
+      throw new Error(
+        `Datas divergentes entre as abas do Plano Diário — importação cancelada.\n\n${detail}\n\n` +
+        `Corrija a célula F1 para a MESMA data em todas as abas (1T/2T/3T) e importe novamente.`
+      );
     }
   }
 
@@ -3102,6 +3118,20 @@ const UI = {
       State.scrap = scrap;
       State.ocorrencias = ocorrencias;
       State.aliases = {}; aliases.forEach(a => State.aliases[a.code] = a.alias);
+      // v11.9: meta compartilhada acompanha a fonte ativa
+      if (Supa.active) {
+        try {
+          const cg = await Supa.getAll('goals');
+          if (cg.length) {
+            const g = cg[0];
+            State.goals = { qty: g.qty ?? null, cost: g.cost ?? null, pct: g.pct ?? null };
+            ['qty','cost','pct'].forEach(k => {
+              const el = document.getElementById('goal-' + k);
+              if (el) el.value = State.goals[k] != null ? State.goals[k] : '';
+            });
+          }
+        } catch(e) {}
+      }
       this._enrichDescs();
       this._initFilters();
       this.renderDBSummary();
@@ -3219,11 +3249,21 @@ const UI = {
     }
   },
 
-  saveGoals() {
+  async saveGoals() {
     const toNum = id => { const v = parseFloat(document.getElementById(id)?.value); return isNaN(v) || v < 0 ? null : v; };
     State.goals = { pct: toNum('goal-pct'), qty: toNum('goal-qty'), cost: toNum('goal-cost') };
     try { localStorage.setItem('scrapiq-goals', JSON.stringify(State.goals)); } catch(e) {}
-    UI.toast('Metas de scrap salvas!', 'ok');
+    // v11.9: com nuvem ativa, a meta é compartilhada por todos os usuários
+    if (Supa.active) {
+      try {
+        await Supa.putMany('goals', [{ ...State.goals }]);
+        UI.toast('Metas salvas na nuvem — visíveis para todos os usuários!', 'ok');
+      } catch(e) {
+        UI.toast('Meta salva localmente, mas falhou na nuvem: ' + e.message.slice(0, 80), 'warn');
+      }
+    } else {
+      UI.toast('Metas de scrap salvas!', 'ok');
+    }
     Dashboard.renderTemporal();
     DashEq.renderTemporal();
   },
@@ -5155,12 +5195,25 @@ async function boot() {
   UI.supaInitUI();
   UI.spin('Iniciando...');
   UI._applyStoredTheme();
-  // Restaura metas de scrap
+  // Restaura metas de scrap (v11.9: nuvem tem precedência quando ativa)
   try {
     const g = JSON.parse(localStorage.getItem('scrapiq-goals') || '{}');
     if (g.qty  != null) State.goals.qty  = +g.qty;
     if (g.cost != null) State.goals.cost = +g.cost;
     if (g.pct  != null) State.goals.pct  = +g.pct;
+  } catch(e) {}
+  if (Supa.active) {
+    try {
+      const cloudGoals = await Supa.getAll('goals');
+      if (cloudGoals.length) {
+        const g = cloudGoals[0];
+        if (g.qty  !== undefined) State.goals.qty  = g.qty;
+        if (g.cost !== undefined) State.goals.cost = g.cost;
+        if (g.pct  !== undefined) State.goals.pct  = g.pct;
+      }
+    } catch(e) { console.warn('goals cloud:', e); }
+  }
+  try {
     ['qty','cost','pct'].forEach(k => {
       const el = document.getElementById('goal-' + k);
       if (el && State.goals[k] != null) el.value = State.goals[k];
