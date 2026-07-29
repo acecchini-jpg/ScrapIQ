@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v11.9 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v11.10 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -165,7 +165,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v11.9</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v11.10</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -429,7 +429,7 @@ main{flex:1;display:flex;flex-direction:column}
           <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#22c997" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
         </div>
         <div>
-          <div class="ff" style="font-weight:700;font-size:13px" data-i18n="import.scrap.title">Área B — Dados de Refugo (Por Turno)</div>
+          <div class="ff" style="font-weight:700;font-size:13px" data-i18n="import.scrap.title">Área A — Dados de Refugo (Por Turno)</div>
           <div style="font-size:11px;color:var(--text-muted)" data-i18n="import.scrap.desc">Col J,L,N,O,Q,S,T,AD,AE · Acumula histórico</div>
         </div>
       </div>
@@ -448,7 +448,7 @@ main{flex:1;display:flex;flex-direction:column}
           <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#b06cff" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
         </div>
         <div>
-          <div class="ff" style="font-weight:700;font-size:13px" data-i18n="import.ocorr.title">Área C — Plano Diário de Produção (Ocorrências)</div>
+          <div class="ff" style="font-weight:700;font-size:13px" data-i18n="import.ocorr.title">Área B — Plano Diário de Produção (Ocorrências)</div>
           <div style="font-size:11px;color:var(--text-muted)" data-i18n="import.ocorr.desc">Abas 1T/2T/3T · Célula F1=Data · F2=Turno · Colunas: Cod SAP, Plano, Causa/Comentário</div>
         </div>
       </div>
@@ -471,7 +471,7 @@ main{flex:1;display:flex;flex-direction:column}
           <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4f7cff" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg>
         </div>
         <div>
-          <div class="ff" style="font-weight:700;font-size:13px" data-i18n="import.cost.title">Área A — Matriz de Custo</div>
+          <div class="ff" style="font-weight:700;font-size:13px" data-i18n="import.cost.title">Área C — Matriz de Custo</div>
           <div style="font-size:11px;color:var(--text-muted)" data-i18n="import.cost.desc">Col A: Código · Col B: Descrição · Col E: Custo</div>
         </div>
       </div>
@@ -512,25 +512,25 @@ main{flex:1;display:flex;flex-direction:column}
     <div class="ff" style="font-weight:700;font-size:12px;color:var(--text-dim);margin-bottom:10px;letter-spacing:.3px" data-i18n="import.clean.title">LIMPEZA DE BANCOS DE DADOS</div>
     <div id="clear-windows" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
-      <button onclick="UI.clearCosts()" style="padding:9px 18px;background:rgba(245,166,35,.1);border:1px solid rgba(245,166,35,.4);border-radius:7px;color:#f5a623;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;display:flex;align-items:center;justify-content:center;gap:7px" onmouseover="this.style.background='rgba(245,166,35,.2)'" onmouseout="this.style.background='rgba(245,166,35,.1)'">
-        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-        <span data-i18n="import.clean.a">Limpar Área A — Custo</span>
-      </button>
       <button onclick="UI.clearScrap()" style="padding:9px 18px;background:rgba(79,124,255,.1);border:1px solid rgba(79,124,255,.4);border-radius:7px;color:#4f7cff;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;display:flex;align-items:center;justify-content:center;gap:7px" onmouseover="this.style.background='rgba(79,124,255,.2)'" onmouseout="this.style.background='rgba(79,124,255,.1)'">
         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-        <span data-i18n="import.clean.b">Limpar Área B — Refugo</span>
+        <span data-i18n="import.clean.b">Limpar Área A — Refugo</span>
       </button>
       <button onclick="UI.clearOcorrencias()" style="padding:9px 18px;background:rgba(176,108,255,.1);border:1px solid rgba(176,108,255,.4);border-radius:7px;color:#b06cff;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;display:flex;align-items:center;justify-content:center;gap:7px" onmouseover="this.style.background='rgba(176,108,255,.2)'" onmouseout="this.style.background='rgba(176,108,255,.1)'">
         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-        <span data-i18n="import.clean.c">Limpar Área C — Produção</span>
-      </button>
-      <button onclick="UI.clearAliases()" style="padding:9px 18px;background:rgba(0,212,170,.1);border:1px solid rgba(0,212,170,.4);border-radius:7px;color:#00d4aa;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;display:flex;align-items:center;justify-content:center;gap:7px" onmouseover="this.style.background='rgba(0,212,170,.2)'" onmouseout="this.style.background='rgba(0,212,170,.1)'">
-        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-        <span data-i18n="import.clean.d">Limpar Área D — Equipamentos [Alias]</span>
+        <span data-i18n="import.clean.c">Limpar Área B — Produção</span>
       </button>
       <button onclick="UI.promptDeleteDay()" style="padding:9px 18px;background:rgba(176,108,255,.1);border:1px solid rgba(176,108,255,.4);border-radius:7px;color:#b06cff;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;display:flex;align-items:center;justify-content:center;gap:7px" onmouseover="this.style.background='rgba(176,108,255,.2)'" onmouseout="this.style.background='rgba(176,108,255,.1)'">
         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
         <span data-i18n="import.clean.day">Excluir Dia / Mês de Produção</span>
+      </button>
+      <button onclick="UI.clearCosts()" style="padding:9px 18px;background:rgba(245,166,35,.1);border:1px solid rgba(245,166,35,.4);border-radius:7px;color:#f5a623;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;display:flex;align-items:center;justify-content:center;gap:7px" onmouseover="this.style.background='rgba(245,166,35,.2)'" onmouseout="this.style.background='rgba(245,166,35,.1)'">
+        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+        <span data-i18n="import.clean.a">Limpar Área C — Custo</span>
+      </button>
+      <button onclick="UI.clearAliases()" style="padding:9px 18px;background:rgba(0,212,170,.1);border:1px solid rgba(0,212,170,.4);border-radius:7px;color:#00d4aa;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;display:flex;align-items:center;justify-content:center;gap:7px" onmouseover="this.style.background='rgba(0,212,170,.2)'" onmouseout="this.style.background='rgba(0,212,170,.1)'">
+        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+        <span data-i18n="import.clean.d">Limpar Área D — Equipamentos [Alias]</span>
       </button>
       <button onclick="UI.clearAll()" style="padding:9px 18px;background:rgba(255,94,94,.1);border:1px solid rgba(255,94,94,.35);border-radius:7px;color:#ff5e5e;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;display:flex;align-items:center;justify-content:center;gap:7px;transition:background .15s" onmouseover="this.style.background='rgba(255,94,94,.2)'" onmouseout="this.style.background='rgba(255,94,94,.1)'">
         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
@@ -3403,14 +3403,14 @@ const UI = {
         </div>
       </div>`;
     host.innerHTML =
-      card('Área A — Custo', '#f5a623', costsArr.length, costsWin, 'materiais') +
-      card('Área B — Refugo', '#4f7cff', (State.scrap||[]).length, scrapWin, 'registros') +
-      card('Área C — Produção', '#b06cff', (State.ocorrencias||[]).length, ocorrWin, 'ocorrências') +
+      card('Área A — Refugo', '#4f7cff', (State.scrap||[]).length, scrapWin, 'registros') +
+      card('Área B — Produção', '#b06cff', (State.ocorrencias||[]).length, ocorrWin, 'ocorrências') +
+      card('Área C — Custo', '#f5a623', costsArr.length, costsWin, 'materiais') +
       card('Área D — Equipamentos [Alias]', '#00d4aa', Object.keys(State.aliases||{}).length, null, 'equipamentos mapeados');
   },
 
   async clearCosts() {
-    if (!confirm('Deseja realmente apagar TODOS os dados da Área A — Custo?')) return;
+    if (!confirm('Deseja realmente apagar TODOS os dados da Área C — Custo?')) return;
     UI.spin('Limpando Área A...');
     await DataService.clear('costs');
     State.costs = {};
@@ -3421,11 +3421,11 @@ const UI = {
     this.renderClearWindows();
     Dashboard.render();
     UI.unspin();
-    this.toast('Área A — Custo limpa', 'ok');
+    this.toast('Área C — Custo limpa', 'ok');
   },
 
   async clearScrap() {
-    if (!confirm('Deseja realmente apagar TODOS os dados da Área B — Refugo?')) return;
+    if (!confirm('Deseja realmente apagar TODOS os dados da Área A — Refugo?')) return;
     UI.spin('Limpando Área B...');
     await DataService.clear('scrap');
     State.scrap = [];
@@ -3443,11 +3443,11 @@ const UI = {
     Dashboard.render();
     if (typeof DashEq !== 'undefined') { DashEq._initialized = false; }
     UI.unspin();
-    this.toast('Área B — Refugo limpa', 'ok');
+    this.toast('Área A — Refugo limpa', 'ok');
   },
 
   async clearOcorrencias() {
-    if (!confirm('Deseja realmente apagar TODOS os dados da Área C — Produção?')) return;
+    if (!confirm('Deseja realmente apagar TODOS os dados da Área B — Produção?')) return;
     UI.spin('Limpando Área C...');
     await DataService.clear('ocorrencias');
     DataService._db = null;
@@ -3460,7 +3460,7 @@ const UI = {
     this.renderClearWindows();
     Dashboard.render();
     UI.unspin();
-    this.toast('Área C — Produção limpa', 'ok');
+    this.toast('Área B — Produção limpa', 'ok');
   },
 
   async clearAliases() {
@@ -3526,7 +3526,7 @@ const UI = {
   // ── Solicita data e exclui todos os registros de refugo do dia informado ──
   async promptDeleteDay() {
     const input = (prompt(
-      'Excluir Registros de Refugo — Área B\n\n' +
+      'Excluir Registros de Refugo — Área A\n\n' +
       'Digite a data ou mês:\n' +
       '  • Dia específico : AAAA-MM-DD  (ex: 2026-06-15)\n' +
       '  • Mês inteiro    : AAAA-MM     (ex: 2026-06)'
@@ -4367,9 +4367,9 @@ const I18n = {
       'ocorr.empty.prod':'Nenhuma ocorrência registrada para este produto no período selecionado',
       'ocorr.empty.eq':'Nenhuma ocorrência registrada para os produtos deste equipamento no período',
       'ocorr.copy':'🤖 Copiar para IA','ocorr.copy.ok':'Copiado para a área de transferência!',
-      'import.cost.title':'Área A — Matriz de Custo','import.cost.desc':'Col A: Código · Col B: Descrição · Col E: Custo',
-      'import.scrap.title':'Área B — Dados de Refugo (Por Turno)','import.scrap.desc':'Col J,L,N,O,Q,S,T,AD,AE · Acumula histórico',
-      'import.ocorr.title':'Área C — Plano Diário de Produção (Ocorrências)','import.ocorr.desc':'Abas 1T/2T/3T · Célula F1=Data · F2=Turno · Colunas: Cod SAP, Plano, Causa/Comentário',
+      'import.cost.title':'Área C — Matriz de Custo','import.cost.desc':'Col A: Código · Col B: Descrição · Col E: Custo',
+      'import.scrap.title':'Área A — Dados de Refugo (Por Turno)','import.scrap.desc':'Col J,L,N,O,Q,S,T,AD,AE · Acumula histórico',
+      'import.ocorr.title':'Área B — Plano Diário de Produção (Ocorrências)','import.ocorr.desc':'Abas 1T/2T/3T · Célula F1=Data · F2=Turno · Colunas: Cod SAP, Plano, Causa/Comentário',
       'import.drag':'Arraste ou clique','import.cost.over':'Sobrescreve base de custos existente',
       'import.scrap.acc':'Acumula — não substitui histórico','import.ocorr.acc':'Acumula plano de produção diário — acrescenta registros',
       'config.goal.title':'Meta de Scrap','config.goal.sub':'Linha de referência nos gráficos de Evolução Temporal — Qtd e Custo são metas diárias e são multiplicadas pelo período selecionado',
@@ -4397,8 +4397,8 @@ const I18n = {
       'import.alias.desc':'Col A: Cód. Equip. · Col B: Descrição · Col C: Alias · Substitui base de alias',
       'import.alias.over':'Arquivo Alias.xlsx — sobrescreve base de apelidos',
       'import.clean.title':'LIMPEZA DE BANCOS DE DADOS',
-      'import.clean.a':'Limpar Área A — Custo','import.clean.b':'Limpar Área B — Refugo',
-      'import.clean.c':'Limpar Área C — Produção','import.clean.d':'Limpar Área D — Equipamentos [Alias]',
+      'import.clean.a':'Limpar Área C — Custo','import.clean.b':'Limpar Área A — Refugo',
+      'import.clean.c':'Limpar Área B — Produção','import.clean.d':'Limpar Área D — Equipamentos [Alias]',
       'import.clean.day':'Excluir Dia / Mês de Produção','import.clean.all':'Limpar Todos os Bancos de Dados',
       'tab.strat':'Estratificação',
       'strat.note':'Esta aba usa os filtros ativos do Dashboard por Produto (período, turnos e busca).',
@@ -4441,9 +4441,9 @@ const I18n = {
       'ocorr.empty.prod':'No occurrences recorded for this product in the selected period',
       'ocorr.empty.eq':'No occurrences recorded for the products of this equipment in the period',
       'ocorr.copy':'🤖 Copy for AI','ocorr.copy.ok':'Copied to clipboard!',
-      'import.cost.title':'Area A — Cost Matrix','import.cost.desc':'Col A: Code · Col B: Description · Col E: Cost',
-      'import.scrap.title':'Area B — Scrap Data (By Shift)','import.scrap.desc':'Cols J,L,N,O,Q,S,T,AD,AE · Accumulates history',
-      'import.ocorr.title':'Area C — Daily Production Plan (Occurrences)','import.ocorr.desc':'Tabs 1T/2T/3T · Cell F1=Date · F2=Shift · Cols: SAP Code, Plan, Cause/Comment',
+      'import.cost.title':'Area C — Cost Matrix','import.cost.desc':'Col A: Code · Col B: Description · Col E: Cost',
+      'import.scrap.title':'Area A — Scrap Data (By Shift)','import.scrap.desc':'Cols J,L,N,O,Q,S,T,AD,AE · Accumulates history',
+      'import.ocorr.title':'Area B — Daily Production Plan (Occurrences)','import.ocorr.desc':'Tabs 1T/2T/3T · Cell F1=Date · F2=Shift · Cols: SAP Code, Plan, Cause/Comment',
       'import.drag':'Drag or click','import.cost.over':'Overwrites existing cost base',
       'import.scrap.acc':'Accumulates — does not replace history','import.ocorr.acc':'Accumulates daily production plan — adds records',
       'config.goal.title':'Scrap Target','config.goal.sub':'Reference line in Time Evolution charts — Qty and Cost are daily targets multiplied by selected period',
@@ -4471,8 +4471,8 @@ const I18n = {
       'import.alias.desc':'Col A: Equip. Code · Col B: Description · Col C: Alias · Replaces alias base',
       'import.alias.over':'Alias.xlsx file — overwrites nickname base',
       'import.clean.title':'DATABASE CLEANUP',
-      'import.clean.a':'Clear Area A — Cost','import.clean.b':'Clear Area B — Scrap',
-      'import.clean.c':'Clear Area C — Production','import.clean.d':'Clear Area D — Equipment [Alias]',
+      'import.clean.a':'Clear Area C — Cost','import.clean.b':'Clear Area A — Scrap',
+      'import.clean.c':'Clear Area B — Production','import.clean.d':'Clear Area D — Equipment [Alias]',
       'import.clean.day':'Delete Production Day / Month','import.clean.all':'Clear All Databases',
       'tab.strat':'Stratification',
       'strat.note':'This tab uses the active filters from the Product Dashboard (period, shifts and search).',
@@ -4515,9 +4515,9 @@ const I18n = {
       'ocorr.empty.prod':'Ninguna ocurrencia registrada para este producto en el período seleccionado',
       'ocorr.empty.eq':'Ninguna ocurrencia registrada para los productos de este equipo en el período',
       'ocorr.copy':'🤖 Copiar para IA','ocorr.copy.ok':'¡Copiado al portapapeles!',
-      'import.cost.title':'Área A — Matriz de Costos','import.cost.desc':'Col A: Código · Col B: Descripción · Col E: Costo',
-      'import.scrap.title':'Área B — Datos de Scrap (Por Turno)','import.scrap.desc':'Cols J,L,N,O,Q,S,T,AD,AE · Acumula historial',
-      'import.ocorr.title':'Área C — Plan Diario de Producción (Ocurrencias)','import.ocorr.desc':'Pestañas 1T/2T/3T · Celda F1=Fecha · F2=Turno · Cols: Cód SAP, Plan, Causa/Comentario',
+      'import.cost.title':'Área C — Matriz de Costos','import.cost.desc':'Col A: Código · Col B: Descripción · Col E: Costo',
+      'import.scrap.title':'Área A — Datos de Scrap (Por Turno)','import.scrap.desc':'Cols J,L,N,O,Q,S,T,AD,AE · Acumula historial',
+      'import.ocorr.title':'Área B — Plan Diario de Producción (Ocurrencias)','import.ocorr.desc':'Pestañas 1T/2T/3T · Celda F1=Fecha · F2=Turno · Cols: Cód SAP, Plan, Causa/Comentario',
       'import.drag':'Arrastre o haga clic','import.cost.over':'Sobreescribe la base de costos existente',
       'import.scrap.acc':'Acumula — no reemplaza el historial','import.ocorr.acc':'Acumula el plan de producción diario — agrega registros',
       'config.goal.title':'Meta de Scrap','config.goal.sub':'Línea de referencia en gráficos de Evolución Temporal — Cant y Costo son metas diarias multiplicadas por el período seleccionado',
@@ -4545,8 +4545,8 @@ const I18n = {
       'import.alias.desc':'Col A: Cód. Equip. · Col B: Descripción · Col C: Alias · Reemplaza base de alias',
       'import.alias.over':'Archivo Alias.xlsx — sobreescribe base de apodos',
       'import.clean.title':'LIMPIEZA DE BASES DE DATOS',
-      'import.clean.a':'Limpiar Área A — Costo','import.clean.b':'Limpiar Área B — Scrap',
-      'import.clean.c':'Limpiar Área C — Producción','import.clean.d':'Limpiar Área D — Equipos [Alias]',
+      'import.clean.a':'Limpiar Área C — Costo','import.clean.b':'Limpiar Área A — Scrap',
+      'import.clean.c':'Limpiar Área B — Producción','import.clean.d':'Limpiar Área D — Equipos [Alias]',
       'import.clean.day':'Eliminar Día / Mes de Producción','import.clean.all':'Limpiar Todas las Bases de Datos',
       'tab.strat':'Estratificación',
       'strat.note':'Esta pestaña usa los filtros activos del Dashboard por Producto (período, turnos y búsqueda).',
