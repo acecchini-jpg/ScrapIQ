@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v11.10 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v11.11 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -165,7 +165,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v11.10</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v11.11</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -181,6 +181,10 @@ main{flex:1;display:flex;flex-direction:column}
       <button class="stbtn" id="lang-en" onclick="I18n.set('en')" title="English"    style="min-width:32px;padding:5px 8px">EN</button>
       <button class="stbtn" id="lang-es" onclick="I18n.set('es')" title="Español"    style="min-width:32px;padding:5px 8px">ES</button>
     </div>
+    <a href="https://acecchini-jpg.github.io/Analyser/" target="_blank" rel="noopener noreferrer" title="Abrir Scrap Analyser em nova aba" style="padding:5px 10px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text-muted);font-size:12px;font-weight:600;cursor:pointer;line-height:1;display:flex;align-items:center;gap:5px;text-decoration:none;font-family:'Inter',sans-serif" onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'" onmouseout="this.style.color='var(--text-muted)';this.style.borderColor='var(--border2)'">
+      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <span data-i18n="header.analyser">Analyser</span>
+    </a>
     <button id="theme-toggle" onclick="UI.toggleThemeOrAdmin(event)" title="Alternar Tema (Shift+Clique para mostrar/ocultar abas admin)" style="padding:5px 9px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text-muted);font-size:14px;cursor:pointer;line-height:1;display:flex;align-items:center">🌙</button>
   </div>
 </header>
@@ -4418,7 +4422,8 @@ const I18n = {
       'supa.msg.fill':'Preencha URL e chave anon','supa.msg.testing':'Testando conexão...','supa.msg.loading':'Carregando dados...',
       'supa.msg.ok':'✓ Conexão OK — tabela encontrada','supa.msg.fail':'Falha na conexão',
       'supa.msg.nolocal':'Nenhum dado local para migrar','supa.msg.confirm':'Enviar {n} registros locais para a nuvem?\n\nRegistros já existentes na nuvem serão atualizados (upsert).',
-      'supa.msg.migrating':'Migrando dados para a nuvem...','supa.msg.migrated':'✓ {n} registros migrados para a nuvem','supa.msg.fromfile':'⚙ Configuração carregada do config.json do site'
+      'supa.msg.migrating':'Migrando dados para a nuvem...','supa.msg.migrated':'✓ {n} registros migrados para a nuvem','supa.msg.fromfile':'⚙ Configuração carregada do config.json do site',
+      'header.analyser':'Analyser'
     },
     en: {
       'tab.dashboard':'Dashboard','tab.dasheq':'By Equipment','tab.pdm':'PDM Summary','tab.import':'Import Data','tab.config':'Settings',
@@ -4492,7 +4497,8 @@ const I18n = {
       'supa.msg.fill':'Fill in URL and anon key','supa.msg.testing':'Testing connection...','supa.msg.loading':'Loading data...',
       'supa.msg.ok':'✓ Connection OK — table found','supa.msg.fail':'Connection failed',
       'supa.msg.nolocal':'No local data to migrate','supa.msg.confirm':'Send {n} local records to the cloud?\n\nExisting cloud records will be updated (upsert).',
-      'supa.msg.migrating':'Migrating data to the cloud...','supa.msg.migrated':'✓ {n} records migrated to the cloud','supa.msg.fromfile':'⚙ Configuration loaded from the site config.json'
+      'supa.msg.migrating':'Migrating data to the cloud...','supa.msg.migrated':'✓ {n} records migrated to the cloud','supa.msg.fromfile':'⚙ Configuration loaded from the site config.json',
+      'header.analyser':'Analyser'
     },
     es: {
       'tab.dashboard':'Dashboard','tab.dasheq':'Por Equipo','tab.pdm':'Resumen PDM','tab.import':'Importar Datos','tab.config':'Configuración',
@@ -4566,7 +4572,8 @@ const I18n = {
       'supa.msg.fill':'Complete URL y clave anon','supa.msg.testing':'Probando conexión...','supa.msg.loading':'Cargando datos...',
       'supa.msg.ok':'✓ Conexión OK — tabla encontrada','supa.msg.fail':'Fallo de conexión',
       'supa.msg.nolocal':'Sin datos locales para migrar','supa.msg.confirm':'¿Enviar {n} registros locales a la nube?\n\nLos registros existentes en la nube serán actualizados (upsert).',
-      'supa.msg.migrating':'Migrando datos a la nube...','supa.msg.migrated':'✓ {n} registros migrados a la nube','supa.msg.fromfile':'⚙ Configuración cargada del config.json del sitio'
+      'supa.msg.migrating':'Migrando datos a la nube...','supa.msg.migrated':'✓ {n} registros migrados a la nube','supa.msg.fromfile':'⚙ Configuración cargada del config.json del sitio',
+      'header.analyser':'Analyser'
     }
   },
 
