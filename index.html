@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v11.11 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v11.12 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -165,7 +165,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v11.11</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v11.12</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -967,6 +967,15 @@ const Supa = {
     const cr = r.headers.get('content-range') || '';
     const removed = parseInt(cr.split('/')[1]);
     return isFinite(removed) ? removed : 0;
+  },
+
+  // v11.12: remove ocorrências de uma data específica (substituição por data na importação)
+  async deleteOcorrenciasByDate(dateStr) {
+    const r = await this._req(`${this._base()}?store=eq.ocorrencias&doc->>data=eq.${encodeURIComponent(dateStr)}`,
+      { method: 'DELETE', headers: this._headers({ 'Prefer': 'count=exact' }) });
+    const cr = r.headers.get('content-range') || '';
+    const removed = parseInt(cr.split('/')[1]);
+    return isFinite(removed) ? removed : 0;
   }
 };
 
@@ -1040,29 +1049,42 @@ const DataService = {
     return { added: fresh.length, ignored };
   },
 
+  // v11.12: SUBSTITUIÇÃO por data — ao importar um arquivo, todos os registros
+  // já existentes para as datas presentes no arquivo são removidos primeiro,
+  // e somente os dados novos permanecem no sistema para aquela(s) data(s).
   async appendOcorrencias(rows) {
+    if (!rows.length) return { added: 0, removed: 0, dates: [] };
+    const dates = [...new Set(rows.map(r => r.data))];
+
     if (Supa.active) {
-      // Dedup comparando hashes (as próprias chaves da nuvem) — sem baixar docs
-      const existKeys = new Set(await Supa.getKeys('ocorrencias'));
-      const fresh = rows.filter(r => !existKeys.has(Supa.keyOf('ocorrencias', r)));
-      if (fresh.length) await Supa.putMany('ocorrencias', fresh.map(r => { const rec = {...r}; delete rec.id; return rec; }));
-      return { added: fresh.length, ignored: rows.length - fresh.length };
+      let removed = 0;
+      for (const d of dates) removed += await Supa.deleteOcorrenciasByDate(d);
+      const clean = rows.map(r => { const rec = {...r}; delete rec.id; return rec; });
+      await Supa.putMany('ocorrencias', clean);
+      return { added: rows.length, removed, dates };
     }
+
     if (!this._db) await this.open();
-    // Use a composite key for dedup: data|turno|codigoProduto|planoProducao
-    const existing = await this.getAll('ocorrencias');
-    const existKeys = new Set(existing.map(r => `${r.data}|${r.turno}|${r.codigoProduto}|${r.planoProducao}|${r.comentario}`));
-    const fresh = rows.filter(r => !existKeys.has(`${r.data}|${r.turno}|${r.codigoProduto}|${r.planoProducao}|${r.comentario}`));
-    if (fresh.length) {
-      return new Promise((res, rej) => {
-        const tx = this._db.transaction('ocorrencias', 'readwrite');
-        const s = tx.objectStore('ocorrencias');
-        fresh.forEach(i => { const rec = {...i}; delete rec.id; s.add(rec); });
-        tx.oncomplete = () => res({ added: fresh.length, ignored: rows.length - fresh.length });
-        tx.onerror = rej;
-      });
-    }
-    return { added: 0, ignored: rows.length };
+    const dateSet = new Set(dates);
+    return new Promise((res, rej) => {
+      const tx = this._db.transaction('ocorrencias', 'readwrite');
+      const s = tx.objectStore('ocorrencias');
+      let removed = 0;
+      const cursorReq = s.openCursor();
+      cursorReq.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) {
+          if (dateSet.has(cursor.value.data)) { cursor.delete(); removed++; }
+          cursor.continue();
+        } else {
+          // cursor esgotado: agora insere os registros novos
+          rows.forEach(i => { const rec = {...i}; delete rec.id; s.add(rec); });
+        }
+      };
+      cursorReq.onerror = rej;
+      tx.oncomplete = () => res({ added: rows.length, removed, dates });
+      tx.onerror = rej;
+    });
   },
 
   async saveAliases(rows) {
@@ -2738,7 +2760,8 @@ const UI = {
   async _readMultipleOcorr(files) {
     UI.spin(`Processando ${files.length} arquivo(s)...`);
     let totalAdded = 0;
-    let totalIgnored = 0;
+    let totalRemoved = 0;
+    const allDates = new Set();
     try {
       for (const file of files) {
         UI.spin(`Lendo ${file.name}...`);
@@ -2752,21 +2775,24 @@ const UI = {
         if (!DataService._db) await DataService.open();
         const rows = parseOcorrenciasWorkbook(wb);
         if (rows.length) {
-          const { added, ignored } = await DataService.appendOcorrencias(rows);
+          const { added, removed, dates } = await DataService.appendOcorrencias(rows);
           totalAdded += added;
-          totalIgnored += (ignored || 0);
+          totalRemoved += (removed || 0);
+          (dates || []).forEach(d => allDates.add(d));
         }
       }
       const all = await DataService.getAll('ocorrencias');
       State.ocorrencias = all;
-      const msg = totalAdded > 0
-        ? `✓ +${totalAdded} ocorrências importadas de ${files.length} arquivo(s) (total: ${all.length})`
-        : `Nenhuma ocorrência nova (${totalIgnored} duplicadas)`;
+      const dateList = [...allDates].sort();
+      const dateLabel = dateList.length === 1 ? dateList[0] : `${dateList.length} datas`;
+      const msg = totalRemoved > 0
+        ? `✓ ${totalAdded} ocorrências importadas de ${files.length} arquivo(s) para ${dateLabel} — ${totalRemoved} registro(s) anterior(es) substituídos (total: ${all.length})`
+        : `✓ +${totalAdded} ocorrências importadas de ${files.length} arquivo(s) (total: ${all.length})`;
       const el = document.getElementById('ocorr-msg');
-      if (el) el.innerHTML = `<span style="color:var(--${totalAdded>0?'green':'yellow'})">${msg}</span>`;
+      if (el) el.innerHTML = `<span style="color:var(--green)">${msg}</span>`;
       document.getElementById('d-ocorr').style.background = 'var(--purple)';
       document.getElementById('s-ocorr').textContent = `${I18n.t('status.ocorr')}: ${all.length}`;
-      this.toast(totalAdded > 0 ? `+${totalAdded} ocorrências importadas` : 'Nenhuma ocorrência nova', totalAdded > 0 ? 'ok' : 'warn');
+      this.toast(totalRemoved > 0 ? `${totalAdded} importadas · ${totalRemoved} substituídas` : `+${totalAdded} ocorrências importadas`, 'ok');
       this.renderDBSummary();
       Dashboard.render();
     } catch(err) {
@@ -2811,17 +2837,18 @@ const UI = {
       this.toast('Nenhum registro de ocorrência válido encontrado (Plano > 0)', 'warn');
       return;
     }
-    const { added, ignored } = await DataService.appendOcorrencias(rows);
+    const { added, removed, dates } = await DataService.appendOcorrencias(rows);
     const all = await DataService.getAll('ocorrencias');
     State.ocorrencias = all;
-    const msg = added > 0
-      ? `✓ +${added} ocorrências importadas (total: ${all.length})`
-      : `Nenhuma ocorrência nova (${ignored} duplicadas)`;
+    const dateLabel = dates.length === 1 ? dates[0] : `${dates.length} datas`;
+    const msg = removed > 0
+      ? `✓ ${added} ocorrências importadas para ${dateLabel} — ${removed} registro(s) anterior(es) dessa(s) data(s) foram substituídos (total: ${all.length})`
+      : `✓ +${added} ocorrências importadas (total: ${all.length})`;
     const el = document.getElementById('ocorr-msg');
-    if (el) el.innerHTML = `<span style="color:var(--${added>0?'green':'yellow'})">${msg}</span>`;
+    if (el) el.innerHTML = `<span style="color:var(--green)">${msg}</span>`;
     document.getElementById('d-ocorr').style.background = 'var(--purple)';
     document.getElementById('s-ocorr').textContent = `${I18n.t('status.ocorr')}: ${all.length}`;
-    this.toast(added > 0 ? `+${added} ocorrências importadas` : 'Nenhuma ocorrência nova', added > 0 ? 'ok' : 'warn');
+    this.toast(removed > 0 ? `${added} importadas · ${removed} substituídas` : `+${added} ocorrências importadas`, 'ok');
     this.renderDBSummary();
     Dashboard.render();
   },
