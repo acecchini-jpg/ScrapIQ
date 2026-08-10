@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v11.12 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v11.13 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -165,7 +165,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v11.12</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v11.13</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -678,6 +678,16 @@ create policy "scrapiq_all" on scrapiq_store
 'use strict';
 
 // ═══════════════════════════════
+// DEBUG GATE (v11.13) — console limpo por padrão
+// Ative no navegador com: localStorage.setItem('scrapiq-debug','1') e recarregue.
+// Desative com: localStorage.removeItem('scrapiq-debug')
+// ═══════════════════════════════
+const DEBUG = (() => { try { return localStorage.getItem('scrapiq-debug') === '1'; } catch(e) { return false; } })();
+function dbg(...a)    { if (DEBUG) console.log(...a); }
+function dbgWarn(...a){ if (DEBUG) console.warn(...a); }
+function dbgErr(...a) { if (DEBUG) console.error(...a); }
+
+// ═══════════════════════════════
 // CONSTANTS
 // ═══════════════════════════════
 const SHIFTS = {
@@ -999,7 +1009,7 @@ const DataService = {
           db.createObjectStore('aliases', { keyPath:'code' });
       };
       req.onsuccess = e => { this._db = e.target.result; res(this._db); };
-      req.onerror = e => { console.error('Erro IndexedDB:', e.target.error); rej(e.target.error); };
+      req.onerror = e => { dbgErr('Erro IndexedDB:', e.target.error); rej(e.target.error); };
     });
   },
 
@@ -1492,7 +1502,7 @@ function parseOcorrenciasWorkbook(wb) {
     }
   }
 
-  console.log(results);
+  dbg('parseOcorrenciasWorkbook:', results.length, 'registros');
   return results;
 }
 
@@ -1940,10 +1950,10 @@ const Dashboard = {
       } else {
         ['k-prod-d','k-scrap-d','k-idx-d','k-cost-d'].forEach(id => set(id, ''));
       }
-    } catch(e) { console.warn('delta calc:', e); }
+    } catch(e) { dbgWarn('delta calc:', e); }
 
     // ── E5: Top Movers ──
-    try { this.renderTopMovers(data); } catch(e) { console.warn('topmovers:', e); }
+    try { this.renderTopMovers(data); } catch(e) { dbgWarn('topmovers:', e); }
 
     this._updatePeriodBar(data);
   },
@@ -2796,7 +2806,7 @@ const UI = {
       this.renderDBSummary();
       Dashboard.render();
     } catch(err) {
-      console.error(err);
+      dbgErr(err);
       UI.toast('Falha ao processar planilha(s): ' + err.message, 'err');
     } finally {
       UI.unspin();
@@ -2818,7 +2828,7 @@ const UI = {
           await this._process(rows, type);
         }
       } catch(err) {
-        console.error(err);
+        dbgErr(err);
         UI.toast('Falha ao processar planilha: ' + err.message, 'err');
       } finally {
         UI.unspin();
@@ -2830,7 +2840,7 @@ const UI = {
   async _processOcorr(wb) {
     if (!DataService._db) {
       try { await DataService.open(); }
-      catch(err) { console.error(err); UI.unspin(); UI.toast('Erro ao conectar ao banco de dados.', 'err'); return; }
+      catch(err) { dbgErr(err); UI.unspin(); UI.toast('Erro ao conectar ao banco de dados.', 'err'); return; }
     }
     const rows = parseOcorrenciasWorkbook(wb);
     if (!rows.length) {
@@ -2856,7 +2866,7 @@ const UI = {
   async _process(rows, type) {
     if (!DataService._db) {
       try { await DataService.open(); }
-      catch(err) { console.error(err); UI.unspin(); UI.toast('Erro ao conectar ao banco de dados.', 'err'); return; }
+      catch(err) { dbgErr(err); UI.unspin(); UI.toast('Erro ao conectar ao banco de dados.', 'err'); return; }
     }
     if (!rows || rows.length < 2) {
       this.toast('Arquivo vazio ou inválido', 'warn');
@@ -5245,7 +5255,7 @@ async function boot() {
         if (g.cost !== undefined) State.goals.cost = g.cost;
         if (g.pct  !== undefined) State.goals.pct  = g.pct;
       }
-    } catch(e) { console.warn('goals cloud:', e); }
+    } catch(e) { dbgWarn('goals cloud:', e); }
   }
   try {
     ['qty','cost','pct'].forEach(k => {
@@ -5301,7 +5311,7 @@ async function boot() {
     document.querySelectorAll('.admin-tab').forEach(el => el.style.display = 'none');
 //cecc
   } catch(e) {
-    console.error(e);
+    dbgErr(e);
     UI.toast('Erro na inicialização: ' + e.message, 'err');
   } finally {
     UI.unspin();
