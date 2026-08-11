@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v11.13 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v11.14 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -165,7 +165,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v11.13</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v11.14</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -207,6 +207,7 @@ main{flex:1;display:flex;flex-direction:column}
     <div class="filter-row">
       <span class="flabel" data-i18n="filter.periodo">Período</span>
       <input type="date" class="finput" id="f-from" onchange="Dashboard.onDateChange()">
+      <button type="button" onclick="Dashboard.copyFromToTo()" title="Copiar data de início para data fim (selecionar um único dia)" style="padding:4px 7px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text-muted);font-size:12px;cursor:pointer;line-height:1;display:flex;align-items:center" onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'" onmouseout="this.style.color='var(--text-muted)';this.style.borderColor='var(--border2)'">➡️</button>
       <input type="date" class="finput" id="f-to"   onchange="Dashboard.onDateChange()">
       <select class="fselect" id="f-year-sel" onchange="Dashboard.onYearChange()" title="Filtrar por Ano" style="min-width:90px">
         <option value="">— Ano —</option>
@@ -295,6 +296,7 @@ main{flex:1;display:flex;flex-direction:column}
     <div class="filter-row">
       <span class="flabel" data-i18n="filter.periodo">Período</span>
       <input type="date" class="finput" id="eq-f-from" onchange="DashEq.onDateChange()">
+      <button type="button" onclick="DashEq.copyFromToTo()" title="Copiar data de início para data fim (selecionar um único dia)" style="padding:4px 7px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text-muted);font-size:12px;cursor:pointer;line-height:1;display:flex;align-items:center" onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'" onmouseout="this.style.color='var(--text-muted)';this.style.borderColor='var(--border2)'">➡️</button>
       <input type="date" class="finput" id="eq-f-to"   onchange="DashEq.onDateChange()">
       <select class="fselect" id="eq-f-year-sel" onchange="DashEq.onYearChange()" title="Filtrar por Ano" style="min-width:90px">
         <option value="">— Ano —</option>
@@ -1748,6 +1750,14 @@ const Dashboard = {
     document.getElementById('tm-stack')?.classList.toggle('active', mode === 'stack');
     document.getElementById('tm-lines')?.classList.toggle('active', mode === 'lines');
     this.renderTemporal();
+  },
+
+  // ── Copia a data de início para a data fim (atalho: filtrar um único dia) ──
+  copyFromToTo() {
+    const from = document.getElementById('f-from').value;
+    if (!from) return;
+    document.getElementById('f-to').value = from;
+    this.onDateChange();
   },
 
   onDateChange() {
@@ -3747,6 +3757,14 @@ const DashEq = {
     this.renderTemporal();
     this.renderShiftDist();
     this.renderPareto();
+  },
+
+  // ── Copia a data de início para a data fim (atalho: filtrar um único dia) ──
+  copyFromToTo() {
+    const from = document.getElementById('eq-f-from').value;
+    if (!from) return;
+    document.getElementById('eq-f-to').value = from;
+    this.onDateChange();
   },
 
   onDateChange() {
