@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v11.14 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v11.15 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -165,7 +165,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v11.14</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v11.15</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -2792,7 +2792,7 @@ const UI = {
           reader.readAsArrayBuffer(file);
         });
         const wb = XLSX.read(data, { type:'array', cellDates:true, fallbackJSDate:true });
-        if (!DataService._db) await DataService.open();
+        if (!Supa.active && !DataService._db) await DataService.open();
         const rows = parseOcorrenciasWorkbook(wb);
         if (rows.length) {
           const { added, removed, dates } = await DataService.appendOcorrencias(rows);
@@ -2848,7 +2848,7 @@ const UI = {
   },
 
   async _processOcorr(wb) {
-    if (!DataService._db) {
+    if (!Supa.active && !DataService._db) {
       try { await DataService.open(); }
       catch(err) { dbgErr(err); UI.unspin(); UI.toast('Erro ao conectar ao banco de dados.', 'err'); return; }
     }
@@ -2874,7 +2874,7 @@ const UI = {
   },
 
   async _process(rows, type) {
-    if (!DataService._db) {
+    if (!Supa.active && !DataService._db) {
       try { await DataService.open(); }
       catch(err) { dbgErr(err); UI.unspin(); UI.toast('Erro ao conectar ao banco de dados.', 'err'); return; }
     }
@@ -3502,7 +3502,7 @@ const UI = {
     UI.spin('Limpando Área C...');
     await DataService.clear('ocorrencias');
     DataService._db = null;
-    await DataService.open();
+    if (!Supa.active) { try { await DataService.open(); } catch(e) { dbgErr(e); } }
     State.ocorrencias = [];
     document.getElementById('d-ocorr').style.background = 'var(--border2)';
     document.getElementById('s-ocorr').textContent = 'Ocorrências —';
@@ -3534,7 +3534,7 @@ const UI = {
     UI.spin('Limpando...');
     await DataService.clearAll();
     DataService._db = null;
-    await DataService.open();
+    if (!Supa.active) { try { await DataService.open(); } catch(e) { dbgErr(e); } }
     State.costs = {};
     State.scrap = [];
     State.ocorrencias = [];
@@ -5289,7 +5289,21 @@ async function boot() {
     }
   } catch(e) {}
   try {
-    await DataService.open();
+    // v11.15: em modo nuvem, o IndexedDB local é DESNECESSÁRIO — pular evita que
+    // navegadores com IndexedDB restrito/indisponível (abas privadas, alguns
+    // webviews de apps como WhatsApp/Instagram) travem o boot inteiro mesmo
+    // quando os dados vêm 100% da nuvem.
+    if (!Supa.active) {
+      try {
+        await DataService.open();
+      } catch(dbErr) {
+        // Falha ao abrir o banco local: não é fatal — segue com State vazio
+        // em vez de abortar todo o carregamento silenciosamente.
+        dbgErr('IndexedDB indisponível:', dbErr);
+        console.error('ScrapIQ: armazenamento local indisponível neste navegador.', dbErr);
+        UI.toast('Armazenamento local indisponível neste navegador. Configure a nuvem (Supabase) em Configurações para usar o app aqui.', 'err');
+      }
+    }
     const { costs, scrap, ocorrencias, aliases } = await DataService.loadAll();
     State.costs = {};
     costs.forEach(c => { State.costs[c.materialCode] = { materialDesc:c.materialDesc, unitCost:c.unitCost }; });
@@ -5330,6 +5344,7 @@ async function boot() {
 //cecc
   } catch(e) {
     dbgErr(e);
+    console.error('ScrapIQ: falha na inicialização.', e);
     UI.toast('Erro na inicialização: ' + e.message, 'err');
   } finally {
     UI.unspin();
