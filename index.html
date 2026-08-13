@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v11.15 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.0 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -165,7 +165,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v11.15</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.0</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -891,6 +891,8 @@ const Supa = {
     if (store === 'scrap')   return String(item.id);
     if (store === 'aliases') return String(item.code);
     if (store === 'goals')   return 'global';   // v11.9: meta única compartilhada
+    if (store === 'stopcodes') return String(item.code); // v12.0: catálogo de motivos de parada
+    if (store === 'registros') return this._hash(`${item.data}|${item.turno}|${item.codigo}`); // v12.0
     // ocorrencias: mesma chave composta usada no dedup local
     return this._hash(`${item.data}|${item.turno}|${item.codigoProduto}|${item.planoProducao}|${item.comentario}`);
   },
@@ -988,6 +990,16 @@ const Supa = {
     const cr = r.headers.get('content-range') || '';
     const removed = parseInt(cr.split('/')[1]);
     return isFinite(removed) ? removed : 0;
+  },
+
+  // v12.0 — Unificação Scrap Manager ↔ Dash SF: remove registros de uma data
+  // específica no store='registros' (mesmo padrão de substituição por data).
+  async deleteRegistrosByDate(dateStr) {
+    const r = await this._req(`${this._base()}?store=eq.registros&doc->>data=eq.${encodeURIComponent(dateStr)}`,
+      { method: 'DELETE', headers: this._headers({ 'Prefer': 'count=exact' }) });
+    const cr = r.headers.get('content-range') || '';
+    const removed = parseInt(cr.split('/')[1]);
+    return isFinite(removed) ? removed : 0;
   }
 };
 
@@ -998,7 +1010,7 @@ const DataService = {
     return new Promise((res, rej) => {
       if (this._db) return res(this._db);
       // Nome Banco de Dados
-      const req = indexedDB.open('ScrapIQ_v3', 5);
+      const req = indexedDB.open('ScrapIQ_v3', 6);
       req.onupgradeneeded = e => {
         const db = e.target.result;
         if (!db.objectStoreNames.contains('costs'))
@@ -1009,6 +1021,11 @@ const DataService = {
           db.createObjectStore('ocorrencias', { keyPath:'id', autoIncrement:true });
         if (!db.objectStoreNames.contains('aliases'))
           db.createObjectStore('aliases', { keyPath:'code' });
+        // v12.0 — Unificação Scrap Manager ↔ Dash SF (diretiva)
+        if (!db.objectStoreNames.contains('registros'))
+          db.createObjectStore('registros', { keyPath:'id', autoIncrement:true });
+        if (!db.objectStoreNames.contains('stopcodes'))
+          db.createObjectStore('stopcodes', { keyPath:'code' });
       };
       req.onsuccess = e => { this._db = e.target.result; res(this._db); };
       req.onerror = e => { dbgErr('Erro IndexedDB:', e.target.error); rej(e.target.error); };
@@ -1099,17 +1116,69 @@ const DataService = {
     });
   },
 
+  // v12.0 — Unificação Scrap Manager ↔ Dash SF: mesma semântica de
+  // substituição-por-data do appendOcorrencias, aplicada ao store='registros'.
+  async appendRegistros(rows) {
+    if (!rows.length) return { added: 0, removed: 0, dates: [] };
+    const dates = [...new Set(rows.map(r => r.data))];
+
+    if (Supa.active) {
+      let removed = 0;
+      for (const d of dates) removed += await Supa.deleteRegistrosByDate(d);
+      const clean = rows.map(r => { const rec = {...r}; delete rec.id; return rec; });
+      await Supa.putMany('registros', clean);
+      return { added: rows.length, removed, dates };
+    }
+
+    if (!this._db) await this.open();
+    const dateSet = new Set(dates);
+    return new Promise((res, rej) => {
+      const tx = this._db.transaction('registros', 'readwrite');
+      const s = tx.objectStore('registros');
+      let removed = 0;
+      const cursorReq = s.openCursor();
+      cursorReq.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) {
+          if (dateSet.has(cursor.value.data)) { cursor.delete(); removed++; }
+          cursor.continue();
+        } else {
+          rows.forEach(i => { const rec = {...i}; delete rec.id; s.add(rec); });
+        }
+      };
+      cursorReq.onerror = rej;
+      tx.oncomplete = () => res({ added: rows.length, removed, dates });
+      tx.onerror = rej;
+    });
+  },
+
+  // v12.0: catálogo de motivos de parada — upsert simples, cumulativo, sem apagar nada.
+  async upsertStopCodes(items) {
+    if (!items.length) return;
+    if (Supa.active) { await Supa.putMany('stopcodes', items); return; }
+    if (!this._db) await this.open();
+    return new Promise((res, rej) => {
+      const tx = this._db.transaction('stopcodes', 'readwrite');
+      const s = tx.objectStore('stopcodes');
+      items.forEach(it => s.put(it)); // put = upsert por keyPath 'code'
+      tx.oncomplete = () => res();
+      tx.onerror = rej;
+    });
+  },
+
   async saveAliases(rows) {
     await this.clear('aliases');
     await this.putMany('aliases', rows);
   },
 
   async loadAll() {
-    // v11.8-perf: 4 stores em paralelo (antes: sequencial)
-    const [costs, scrap, ocorrencias, aliases] = await Promise.all([
-      this.getAll('costs'), this.getAll('scrap'), this.getAll('ocorrencias'), this.getAll('aliases')
+    // v11.8-perf: stores em paralelo (antes: sequencial)
+    // v12.0: + registros/stopcodes (unificação Scrap Manager ↔ Dash SF)
+    const [costs, scrap, ocorrencias, aliases, registros, stopcodes] = await Promise.all([
+      this.getAll('costs'), this.getAll('scrap'), this.getAll('ocorrencias'), this.getAll('aliases'),
+      this.getAll('registros'), this.getAll('stopcodes')
     ]);
-    return { costs, scrap, ocorrencias, aliases };
+    return { costs, scrap, ocorrencias, aliases, registros, stopcodes };
   },
 
   async clearAll() {
@@ -1117,6 +1186,8 @@ const DataService = {
     await this.clear('scrap');
     await this.clear('ocorrencias');
     await this.clear('aliases');
+    await this.clear('registros');   // v12.0
+    await this.clear('stopcodes');   // v12.0
   },
 
   async exportAll() {
@@ -1124,7 +1195,9 @@ const DataService = {
     const scrap       = await this.getAll('scrap');
     const ocorrencias = await this.getAll('ocorrencias');
     const aliases     = await this.getAll('aliases');
-    return { costs, scrap, ocorrencias, aliases, exportedAt: new Date().toISOString(), version: '11.0' };
+    const registros   = await this.getAll('registros');   // v12.0
+    const stopcodes   = await this.getAll('stopcodes');    // v12.0
+    return { costs, scrap, ocorrencias, aliases, registros, stopcodes, exportedAt: new Date().toISOString(), version: '12.0' };
   },
 
   async importAll(data) {
@@ -1134,6 +1207,8 @@ const DataService = {
       if (data.scrap?.length)   await Supa.putMany('scrap', data.scrap);
       if (data.aliases?.length) await Supa.putMany('aliases', data.aliases);
       if (data.ocorrencias?.length) await Supa.putMany('ocorrencias', data.ocorrencias.map(i => { const rec = {...i}; delete rec.id; return rec; }));
+      if (data.registros?.length)   await Supa.putMany('registros', data.registros.map(i => { const rec = {...i}; delete rec.id; return rec; })); // v12.0
+      if (data.stopcodes?.length)   await Supa.putMany('stopcodes', data.stopcodes); // v12.0
       return;
     }
     if (!this._db) await this.open();
@@ -1141,14 +1216,25 @@ const DataService = {
     await this.clear('scrap');
     await this.clear('ocorrencias');
     await this.clear('aliases');
+    await this.clear('registros');   // v12.0
+    await this.clear('stopcodes');   // v12.0
     if (data.costs  && data.costs.length)  await this.putMany('costs',  data.costs);
     if (data.scrap  && data.scrap.length)  await this.putMany('scrap',  data.scrap);
     if (data.aliases && data.aliases.length) await this.putMany('aliases', data.aliases);
+    if (data.stopcodes && data.stopcodes.length) await this.putMany('stopcodes', data.stopcodes); // v12.0
     if (data.ocorrencias && data.ocorrencias.length) {
-      return new Promise((res, rej) => {
+      await new Promise((res, rej) => {
         const tx = this._db.transaction('ocorrencias', 'readwrite');
         const s = tx.objectStore('ocorrencias');
         data.ocorrencias.forEach(i => { const rec = {...i}; delete rec.id; s.add(rec); });
+        tx.oncomplete = res; tx.onerror = rej;
+      });
+    }
+    if (data.registros && data.registros.length) { // v12.0
+      await new Promise((res, rej) => {
+        const tx = this._db.transaction('registros', 'readwrite');
+        const s = tx.objectStore('registros');
+        data.registros.forEach(i => { const rec = {...i}; delete rec.id; s.add(rec); });
         tx.oncomplete = res; tx.onerror = rej;
       });
     }
@@ -1211,6 +1297,8 @@ const State = {
   costs: {},   
   scrap: [],
   ocorrencias: [],
+  registros: [],    // v12.0: unificação Scrap Manager ↔ Dash SF (Plano Diário)
+  stopcodes: [],    // v12.0: catálogo de motivos de parada
   aliases: {},   // { equipmentCode: aliasStr }
   activeShifts: new Set(SHIFT_KEYS),
   globalMetric: 'cost',  // única métrica global para todos os gráficos
@@ -1251,6 +1339,29 @@ function parseDate(val) {
 }
 
 function isoDate(d) { return d.toISOString().split('T')[0]; }
+
+// v12.0 — Unificação Scrap Manager ↔ Dash SF: parser numérico tolerante a
+// vírgula decimal (formato brasileiro), obrigatório para plano/realizado/refugo/paradas.
+function pn(v) {
+  if (!v && v !== 0) return 0;
+  let s = v.toString().replace(/\s/g, '');
+  if (s.includes(',') && s.includes('.')) s = s.replace(/\./g, '').replace(',', '.');
+  else if (s.includes(',')) s = s.replace(',', '.');
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+// v12.0: extrai dd/mm dos últimos 4 dígitos do nome do arquivo (ex: "...-2606.xlsx" → 26/06).
+// Retorna null se o nome não seguir o padrão (nesse caso a checagem é simplesmente pulada).
+function extractDateDDMMFromFilename(name) {
+  const base = String(name || '').replace(/\.[^.]+$/, '');
+  const m = base.match(/[-_ ](\d{4})$/);
+  if (!m) return null;
+  const dd = m[1].slice(0, 2), mm = m[1].slice(2, 4);
+  const ddN = +dd, mmN = +mm;
+  if (ddN < 1 || ddN > 31 || mmN < 1 || mmN > 12) return null;
+  return { dd, mm };
+}
 
 function getWeek(d) {
   const dt = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -1410,17 +1521,22 @@ function parseScrapRows(rows) {
 }
 
 
+// v12.0 — Unificação Scrap Manager ↔ Dash SF: parser agora produz
+// { registros, stopcodes, fileDate } em vez de um array simples de ocorrências.
+// Mapeamento de colunas e regras conforme DIRETIVA_Unificacao_ScrapManager_DashSF.
 function parseOcorrenciasWorkbook(wb) {
   const TARGET_SHEETS = ['1T', '2T', '3T'];
-  const results = [];
+  const SCOL = 16, ECOL = 41; // colunas Q..AP (motivos de parada)
+  const registros = [];
+  const stopCodesMap = new Map(); // dedup do catálogo entre as 3 abas
   const sheetDates = {};   // v11.9: F1 por aba, para validação de consistência
 
   for (const sheetName of TARGET_SHEETS) {
     if (!wb.SheetNames.includes(sheetName)) continue;
 
     const ws = wb.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
-    if (!rows || rows.length < 4) continue;
+    const sd = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    if (!sd || sd.length < 4) continue;
 
     // ── VALIDAÇÃO: C1 deve conter "Cod SAP" ───────────────────────
     const cellC1 = ws['C1'];
@@ -1432,67 +1548,99 @@ function parseOcorrenciasWorkbook(wb) {
       );
     }
 
-    // ── DATA: acesso direto à célula F1 pelo endereço A1 ──────────
-    // Evita inconsistências do sheet_to_json com células mescladas.
-    // ws['F1'].v = valor raw | ws['F1'].w = string formatada pelo Excel
+    // ── DATA: acesso direto à célula F1 pelo endereço A1 (mantido — ver diretiva §7) ──
     let dataStr = 'Não identificada';
     const cellF1 = ws['F1'];
     if (cellF1) {
-      // .v com cellDates:true retorna Date JS; sem cellDates retorna serial numérico
       const parsed = parseDate(cellF1.v);
       if (parsed) {
         dataStr = isoDate(parsed);
       } else if (cellF1.w) {
-        // fallback: string formatada pelo Excel (ex: "01/06/2026")
         const parsedW = parseDate(cellF1.w);
         dataStr = parsedW ? isoDate(parsedW) : cellF1.w.trim();
       }
     }
-    sheetDates[sheetName] = dataStr;   // v11.9: registra F1 desta aba
+    sheetDates[sheetName] = dataStr;
 
-    // ── TURNO: acesso direto à célula F2 pelo endereço A1 ─────────
-    let turno = sheetName;
+    // ── TURNO: canônico (1T/2T/3T) = a própria aba; texto de F2 só para exibição ──
+    const turnoCanon = sheetName;
+    let turnoDisp = sheetName;
     const cellF2 = ws['F2'];
-    if (cellF2 && cellF2.v != null) {
-      turno = String(cellF2.v).trim();
+    if (cellF2 && cellF2.v != null) turnoDisp = String(cellF2.v).trim();
+
+    // ── CATÁLOGO DE MOTIVOS: Q1:AP1 = código, Q2:AP2 = descrição ──
+    const stopCodesAtuais = [];
+    for (let c = SCOL; c <= ECOL; c++) {
+      const code = sd[0]?.[c]?.toString().trim();
+      const desc = sd[1]?.[c]?.toString().trim();
+      if (code && desc) {
+        stopCodesAtuais.push({ code, desc });
+        if (!stopCodesMap.has(code)) stopCodesMap.set(code, { code, desc });
+      } else {
+        stopCodesAtuais.push(null); // mantém alinhamento de índice com a coluna
+      }
     }
 
     // ── DADOS: linha 4 em diante (índice 3+) ──────────────────────
-    // C (índice 2) = Código SAP
-    // F (índice 5) = Plano de produção
-    // K (índice 10) = Comentário
-    for (let i = 3; i < rows.length; i++) {
-      const r = rows[i];
-      if (!r) continue;
+    let lastMaq = ''; // forward-fill da máquina — reseta a cada aba
+    for (let i = 3; i < sd.length; i++) {
+      const row = sd[i];
+      if (!row) continue;
 
-      // ── SENTINELAS DE FIM DE DADOS: coluna B (índice 1) ──────────
-      const colB = r[1] != null ? String(r[1]).replace(/\s+/g, ' ').trim() : '';
+      // ── SENTINELAS DE FIM DE DADOS: coluna B (índice 1) — mantido ──
+      const colB = row[1] != null ? String(row[1]).replace(/\s+/g, ' ').trim() : '';
       if (['total geral programado total', 'programado acabado'].includes(colB.toLowerCase())) break;
 
-      if (r.every(c => c === null || c === undefined || String(c).trim() === '')) continue;
+      if (row.every(c => c === null || c === undefined || String(c).trim() === '')) continue;
 
-      const planoProducao = parseFloat(r[5]) || 0;
-      if (planoProducao <= 0) continue;
+      // Forward-fill Máquina (coluna B)
+      const maqCell = row[1] != null ? String(row[1]).trim() : '';
+      if (maqCell) lastMaq = maqCell;
 
-      const codRaw = r[2];
-      if (codRaw === null || codRaw === undefined) continue;
-      const codigoProduto = String(codRaw).replace(/\D/g, '').substring(0, 7);
-      if (codigoProduto.length < 4) continue;
+      // Código: 7 primeiros dígitos; descarta linha se sobrar < 5 dígitos
+      const codRaw = row[2];
+      if (codRaw === null || codRaw === undefined || codRaw === '') continue;
+      const codigo = String(codRaw).replace(/\D/g, '').substring(0, 7);
+      if (codigo.length < 5) continue;
 
-      const comentario = r[10] != null ? String(r[10]).trim() : '';
+      const descricao = row[3] != null ? String(row[3]).trim() : '';
+      const moldeSrc   = row[4] != null ? String(row[4]).trim() : '';
+      const plano      = pn(row[5]);
+      const realizado  = pn(row[6]);
+      const refugo     = pn(row[8]);
+      const comentario = row[10] != null ? String(row[10]).trim().replace(/[\n\r]+/g, ' ') : '';
 
-      results.push({
-        data:          dataStr,
-        turno:         turno,
-        codigoProduto: codigoProduto,
-        planoProducao: planoProducao,
-        comentario:    comentario
+      // Filtro de linha (diretiva §6 — regra do Dash SF, mais permissiva)
+      if (!(plano > 0 || realizado > 0 || refugo > 0 || comentario !== '')) continue;
+
+      // Paradas: minutos por motivo (só > 0)
+      const paradas = {};
+      stopCodesAtuais.forEach((sc, idx) => {
+        if (!sc) return;
+        const v = pn(row[SCOL + idx]);
+        if (v > 0) paradas[sc.code] = v;
+      });
+
+      registros.push({
+        data: dataStr,
+        turno: turnoCanon,
+        turnoDisp: turnoDisp,
+        codigo: codigo,
+        descricao: descricao,
+        maquina: lastMaq,
+        moldeSrc: moldeSrc,
+        plano: plano,
+        realizado: realizado,
+        refugo: refugo,
+        comentario: comentario,
+        paradas: paradas
       });
     }
   }
 
   // ── VALIDAÇÃO v11.9: F1 (data) deve ser IGUAL em todas as abas presentes ──
   const dateEntries = Object.entries(sheetDates);
+  let fileDate = dateEntries.length ? dateEntries[0][1] : null;
   if (dateEntries.length > 1) {
     const uniqueDates = [...new Set(dateEntries.map(([, d]) => d))];
     if (uniqueDates.length > 1) {
@@ -1502,14 +1650,13 @@ function parseOcorrenciasWorkbook(wb) {
         `Corrija a célula F1 para a MESMA data em todas as abas (1T/2T/3T) e importe novamente.`
       );
     }
+    fileDate = uniqueDates[0];
   }
 
-  dbg('parseOcorrenciasWorkbook:', results.length, 'registros');
-  return results;
+  const stopcodes = [...stopCodesMap.values()];
+  dbg('parseOcorrenciasWorkbook:', registros.length, 'registros,', stopcodes.length, 'stopcodes');
+  return { registros, stopcodes, fileDate };
 }
-
-
-
 
 // ── Parser para Alias.xlsx: [Production line, Short description, Alias] ──
 function parseAliasRows(rows) {
@@ -2655,11 +2802,9 @@ renderDrilldown(mat, desc, scroll = false) {
   _renderOcorrenciasDrill(mat) {
     const container = document.getElementById('ocorrencias-drill');
     if (!container) return;
-//    const ocorrs = State.ocorrencias.filter(o => o.codigoProduto === mat);
-
-//cecc
-      const ocorrs = State.ocorrencias.filter(o => {
-        if (o.codigoProduto !== mat) return false;
+    // v12.0: fonte migrada de ocorrencias → registros (unificação Scrap Manager ↔ Dash SF)
+      const ocorrs = (State.registros || []).filter(o => {
+        if (o.codigo !== mat) return false;
         if (State.filterFrom && o.data < State.filterFrom) return false;
         if (State.filterTo   && o.data > State.filterTo)   return false;
         if (State.filterYear && o.data && parseInt(o.data.substring(0,4)) !== State.filterYear) return false;
@@ -2781,6 +2926,7 @@ const UI = {
     UI.spin(`Processando ${files.length} arquivo(s)...`);
     let totalAdded = 0;
     let totalRemoved = 0;
+    let totalStopCodes = 0;
     const allDates = new Set();
     try {
       for (const file of files) {
@@ -2793,26 +2939,46 @@ const UI = {
         });
         const wb = XLSX.read(data, { type:'array', cellDates:true, fallbackJSDate:true });
         if (!Supa.active && !DataService._db) await DataService.open();
-        const rows = parseOcorrenciasWorkbook(wb);
-        if (rows.length) {
-          const { added, removed, dates } = await DataService.appendOcorrencias(rows);
+        const { registros, stopcodes, fileDate } = parseOcorrenciasWorkbook(wb);
+
+        // v12.0 §8 — validação nome do arquivo (ddmm) vs. data das abas
+        if (fileDate) {
+          const ddmm = extractDateDDMMFromFilename(file.name);
+          if (ddmm) {
+            const dayPart = fileDate.slice(8, 10), monPart = fileDate.slice(5, 7);
+            if (dayPart !== ddmm.dd || monPart !== ddmm.mm) {
+              throw new Error(
+                `Data das abas (${fileDate}) não confere com o nome do arquivo "${file.name}" ` +
+                `(dia ${ddmm.dd}/mês ${ddmm.mm}). Importação cancelada.`
+              );
+            }
+          }
+        }
+
+        if (stopcodes.length) {
+          await DataService.upsertStopCodes(stopcodes);
+          totalStopCodes += stopcodes.length;
+        }
+        if (registros.length) {
+          const { added, removed, dates } = await DataService.appendRegistros(registros);
           totalAdded += added;
           totalRemoved += (removed || 0);
           (dates || []).forEach(d => allDates.add(d));
         }
       }
-      const all = await DataService.getAll('ocorrencias');
-      State.ocorrencias = all;
+      const all = await DataService.getAll('registros');
+      State.registros = all;
+      State.stopcodes = await DataService.getAll('stopcodes');
       const dateList = [...allDates].sort();
       const dateLabel = dateList.length === 1 ? dateList[0] : `${dateList.length} datas`;
       const msg = totalRemoved > 0
-        ? `✓ ${totalAdded} ocorrências importadas de ${files.length} arquivo(s) para ${dateLabel} — ${totalRemoved} registro(s) anterior(es) substituídos (total: ${all.length})`
-        : `✓ +${totalAdded} ocorrências importadas de ${files.length} arquivo(s) (total: ${all.length})`;
+        ? `✓ ${totalAdded} registros importados de ${files.length} arquivo(s) para ${dateLabel} — ${totalRemoved} registro(s) anterior(es) substituídos (total: ${all.length})`
+        : `✓ +${totalAdded} registros importados de ${files.length} arquivo(s) (total: ${all.length})`;
       const el = document.getElementById('ocorr-msg');
       if (el) el.innerHTML = `<span style="color:var(--green)">${msg}</span>`;
       document.getElementById('d-ocorr').style.background = 'var(--purple)';
       document.getElementById('s-ocorr').textContent = `${I18n.t('status.ocorr')}: ${all.length}`;
-      this.toast(totalRemoved > 0 ? `${totalAdded} importadas · ${totalRemoved} substituídas` : `+${totalAdded} ocorrências importadas`, 'ok');
+      this.toast(totalRemoved > 0 ? `${totalAdded} importados · ${totalRemoved} substituídos` : `+${totalAdded} registros importados`, 'ok');
       this.renderDBSummary();
       Dashboard.render();
     } catch(err) {
@@ -2852,23 +3018,25 @@ const UI = {
       try { await DataService.open(); }
       catch(err) { dbgErr(err); UI.unspin(); UI.toast('Erro ao conectar ao banco de dados.', 'err'); return; }
     }
-    const rows = parseOcorrenciasWorkbook(wb);
-    if (!rows.length) {
-      this.toast('Nenhum registro de ocorrência válido encontrado (Plano > 0)', 'warn');
+    const { registros, stopcodes } = parseOcorrenciasWorkbook(wb);
+    if (!registros.length) {
+      this.toast('Nenhum registro válido encontrado no Plano Diário', 'warn');
       return;
     }
-    const { added, removed, dates } = await DataService.appendOcorrencias(rows);
-    const all = await DataService.getAll('ocorrencias');
-    State.ocorrencias = all;
+    if (stopcodes.length) await DataService.upsertStopCodes(stopcodes);
+    const { added, removed, dates } = await DataService.appendRegistros(registros);
+    const all = await DataService.getAll('registros');
+    State.registros = all;
+    State.stopcodes = await DataService.getAll('stopcodes');
     const dateLabel = dates.length === 1 ? dates[0] : `${dates.length} datas`;
     const msg = removed > 0
-      ? `✓ ${added} ocorrências importadas para ${dateLabel} — ${removed} registro(s) anterior(es) dessa(s) data(s) foram substituídos (total: ${all.length})`
-      : `✓ +${added} ocorrências importadas (total: ${all.length})`;
+      ? `✓ ${added} registros importados para ${dateLabel} — ${removed} registro(s) anterior(es) dessa(s) data(s) foram substituídos (total: ${all.length})`
+      : `✓ +${added} registros importados (total: ${all.length})`;
     const el = document.getElementById('ocorr-msg');
     if (el) el.innerHTML = `<span style="color:var(--green)">${msg}</span>`;
     document.getElementById('d-ocorr').style.background = 'var(--purple)';
     document.getElementById('s-ocorr').textContent = `${I18n.t('status.ocorr')}: ${all.length}`;
-    this.toast(removed > 0 ? `${added} importadas · ${removed} substituídas` : `+${added} ocorrências importadas`, 'ok');
+    this.toast(removed > 0 ? `${added} importados · ${removed} substituídos` : `+${added} registros importados`, 'ok');
     this.renderDBSummary();
     Dashboard.render();
   },
@@ -3164,10 +3332,12 @@ const UI = {
     // Recarrega dados da fonte ativa
     this.spin(I18n.t('supa.msg.loading'));
     try {
-      const { costs, scrap, ocorrencias, aliases } = await DataService.loadAll();
+      const { costs, scrap, ocorrencias, aliases, registros, stopcodes } = await DataService.loadAll();
       State.costs = {}; costs.forEach(c => State.costs[c.materialCode] = c);
       State.scrap = scrap;
       State.ocorrencias = ocorrencias;
+      State.registros = registros || [];
+      State.stopcodes = stopcodes || [];
       State.aliases = {}; aliases.forEach(a => State.aliases[a.code] = a.alias);
       // v11.9: meta compartilhada acompanha a fonte ativa
       if (Supa.active) {
@@ -3259,7 +3429,7 @@ const UI = {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      if (!data.costs && !data.scrap && !data.ocorrencias) throw new Error('Formato de backup inválido');
+      if (!data.costs && !data.scrap && !data.ocorrencias && !data.registros) throw new Error('Formato de backup inválido');
       await DataService.importAll(data);
       // Reload state
       const loaded = await DataService.loadAll();
@@ -3267,6 +3437,8 @@ const UI = {
       (loaded.costs || []).forEach(c => { State.costs[c.materialCode] = { materialDesc:c.materialDesc, unitCost:c.unitCost }; });
       State.scrap = loaded.scrap || [];
       State.ocorrencias = loaded.ocorrencias || [];
+      State.registros = loaded.registros || [];   // v12.0
+      State.stopcodes = loaded.stopcodes || [];    // v12.0
       State.aliases = {};
       (loaded.aliases || []).forEach(a => { State.aliases[a.code] = a.alias; });
       UI._enrichDescs();
@@ -3279,9 +3451,9 @@ const UI = {
         document.getElementById('d-cost').classList.add('ok');
         document.getElementById('s-cost').textContent = `${I18n.t('status.cost')}: ${Object.keys(State.costs).length}`;
       }
-      if (State.ocorrencias.length) {
+      if (State.registros.length || State.ocorrencias.length) {
         document.getElementById('d-ocorr').style.background = 'var(--purple)';
-        document.getElementById('s-ocorr').textContent = `${I18n.t('status.ocorr')}: ${State.ocorrencias.length}`;
+        document.getElementById('s-ocorr').textContent = `${I18n.t('status.ocorr')}: ${State.registros.length}`;
       }
       const na = Object.keys(State.aliases).length;
       if (na) {
@@ -3291,7 +3463,7 @@ const UI = {
       UI._initFilters();
       this.renderDBSummary();
       Dashboard.render();
-      this.toast(`Backup restaurado! ${State.scrap.length} scrap, ${State.ocorrencias.length} ocorrências, ${na} alias`, 'ok');
+      this.toast(`Backup restaurado! ${State.scrap.length} scrap, ${State.registros.length} registros, ${na} alias`, 'ok');
     } catch(e) {
       this.toast('Erro ao importar backup: ' + e.message, 'err');
     } finally {
@@ -3380,7 +3552,7 @@ const UI = {
   renderDBSummary() {
     const nc = Object.keys(State.costs).length;
     const ns = State.scrap.length;
-    const no = State.ocorrencias.length;
+    const no = (State.registros || []).length; // v12.0: Plano Diário agora alimenta 'registros'
     const na = Object.keys(State.aliases || {}).length;
     if (!nc && !ns && !no && !na) return;
     const dates = State.scrap.map(r=>r.date).sort();
@@ -3441,7 +3613,7 @@ const UI = {
     const costsArr = Object.values(State.costs || {});
     const costsWin = this._windowOf(costsArr, 'updatedAt') || this._windowOf(costsArr, 'date');
     const scrapWin = this._windowOf(State.scrap || [], 'date');
-    const ocorrWin = this._windowOf(State.ocorrencias || [], 'data');
+    const registrosWin = this._windowOf(State.registros || [], 'data'); // v12.0: fonte migrada
     const card = (title, color, count, win, label) => `
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
@@ -3455,7 +3627,7 @@ const UI = {
       </div>`;
     host.innerHTML =
       card('Área A — Refugo', '#4f7cff', (State.scrap||[]).length, scrapWin, 'registros') +
-      card('Área B — Produção', '#b06cff', (State.ocorrencias||[]).length, ocorrWin, 'ocorrências') +
+      card('Área B — Produção', '#b06cff', (State.registros||[]).length, registrosWin, 'registros') +
       card('Área C — Custo', '#f5a623', costsArr.length, costsWin, 'materiais') +
       card('Área D — Equipamentos [Alias]', '#00d4aa', Object.keys(State.aliases||{}).length, null, 'equipamentos mapeados');
   },
@@ -3499,11 +3671,13 @@ const UI = {
 
   async clearOcorrencias() {
     if (!confirm('Deseja realmente apagar TODOS os dados da Área B — Produção?')) return;
-    UI.spin('Limpando Área C...');
-    await DataService.clear('ocorrencias');
+    UI.spin('Limpando Área B...');
+    // v12.0: Plano Diário agora alimenta 'registros' (unificação Scrap Manager ↔ Dash SF).
+    // 'ocorrencias' fica intocado (dados históricos, sem migração) — não é mais alimentado.
+    await DataService.clear('registros');
     DataService._db = null;
     if (!Supa.active) { try { await DataService.open(); } catch(e) { dbgErr(e); } }
-    State.ocorrencias = [];
+    State.registros = [];
     document.getElementById('d-ocorr').style.background = 'var(--border2)';
     document.getElementById('s-ocorr').textContent = 'Ocorrências —';
     const ocorrMsg = document.getElementById('ocorr-msg'); if (ocorrMsg) ocorrMsg.textContent = '';
@@ -4328,9 +4502,9 @@ const DashEq = {
     const eqData = filteredEq(State.scrap.filter(r => r.equipmentCode === eqCode));
     const matCodes = new Set(eqData.map(r => r.materialCode));
 
-    // Busca ocorrências de todos esses produtos, respeitando filtro de data
-    const ocorrs = State.ocorrencias.filter(o => {
-      if (!matCodes.has(o.codigoProduto)) return false;
+    // Busca registros de todos esses produtos, respeitando filtro de data (v12.0: registros)
+    const ocorrs = (State.registros || []).filter(o => {
+      if (!matCodes.has(o.codigo)) return false;
       if (StateEq.filterFrom && o.data < StateEq.filterFrom) return false;
       if (StateEq.filterTo   && o.data > StateEq.filterTo)   return false;
       if (StateEq.filterYear && o.data && parseInt(o.data.substring(0,4)) !== StateEq.filterYear) return false;
@@ -5072,10 +5246,10 @@ const PDM = {
         txt += `\n  ${I18n.t('pdm.comment.title')} ${this._shiftLabel(sk)}:\n`;
         let anyComment = false;
         top.forEach(p => {
-          const ocs = (State.ocorrencias || []).filter(o =>
+          const ocs = (State.registros || []).filter(o =>
             o.data === date &&
-            this._normTurno(o.turno) === sk &&
-            String(o.codigoProduto) === String(p.materialCode) &&
+            o.turno === sk + 'T' &&
+            String(o.codigo) === String(p.materialCode) &&
             o.comentario && o.comentario.trim()
           );
           const shiftBadge = `<span style="background:rgba(176,108,255,.12);color:var(--purple);border-radius:3px;padding:1px 6px;font-size:10px;font-weight:600;margin-right:5px">${sk}T</span>`;
@@ -5199,10 +5373,10 @@ const PDM = {
         html += `<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--purple);margin-bottom:4px">${I18n.t('pdm.comment.title')}</div>`;
         txt += `   ${I18n.t('pdm.comment.title')}:\n`;
         ['1','2','3'].forEach(sk => {
-          const ocs = (State.ocorrencias || []).filter(o =>
+          const ocs = (State.registros || []).filter(o =>
             o.data === date &&
-            this._normTurno(o.turno) === sk &&
-            String(o.codigoProduto) === String(p.materialCode) &&
+            o.turno === sk + 'T' &&
+            String(o.codigo) === String(p.materialCode) &&
             o.comentario && o.comentario.trim()
           );
           const shiftTag = sk + 'T';
@@ -5304,11 +5478,13 @@ async function boot() {
         UI.toast('Armazenamento local indisponível neste navegador. Configure a nuvem (Supabase) em Configurações para usar o app aqui.', 'err');
       }
     }
-    const { costs, scrap, ocorrencias, aliases } = await DataService.loadAll();
+    const { costs, scrap, ocorrencias, aliases, registros, stopcodes } = await DataService.loadAll();
     State.costs = {};
     costs.forEach(c => { State.costs[c.materialCode] = { materialDesc:c.materialDesc, unitCost:c.unitCost }; });
     State.scrap = scrap;
     State.ocorrencias = ocorrencias || [];
+    State.registros = registros || [];
+    State.stopcodes = stopcodes || [];
     State.aliases = {};
     (aliases || []).forEach(a => { State.aliases[a.code] = a.alias; });
 
