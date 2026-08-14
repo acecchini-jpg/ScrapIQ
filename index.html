@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.0 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.1 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -165,7 +165,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.0</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.1</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -1587,9 +1587,25 @@ function parseOcorrenciasWorkbook(wb) {
       const row = sd[i];
       if (!row) continue;
 
-      // ── SENTINELAS DE FIM DE DADOS: coluna B (índice 1) — mantido ──
+      // ── SENTINELAS DE FIM DE DADOS ────────────────────────────────
+      // v12.1 — Comparação por PREFIXO: os textos reais são "Total Geral
+      // Programado", "Total Programado Acabado" e "Número de faltas".
+      // Igualdade exata falhava silenciosamente e o parser seguia até o
+      // rodapé "TOP 3", que tem layout diferente e sobrescrevia os
+      // registros bons (mesma chave data|turno|codigo).
       const colB = row[1] != null ? String(row[1]).replace(/\s+/g, ' ').trim() : '';
-      if (['total geral programado total', 'programado acabado'].includes(colB.toLowerCase())) break;
+      const colBn = colB.toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');   // remove acentos
+      if (colBn.startsWith('total geral programado') ||
+          colBn.startsWith('total programado') ||
+          colBn.startsWith('numero de faltas')) break;
+
+      // Rodapé "TOP 3 ITENS COM MAIOR NUMERO DE REFUGO": bloco de análise de
+      // causa, não é produção. Detecta em B ou D para resistir a mudanças de posição.
+      const colD = row[3] != null ? String(row[3]).replace(/\s+/g, ' ').trim() : '';
+      const scan = (colB + ' ' + colD).toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if (scan.includes('maior numero de refugo') || scan.includes('nao programados')) break;
 
       if (row.every(c => c === null || c === undefined || String(c).trim() === '')) continue;
 
