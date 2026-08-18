@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.2 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.3 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -165,7 +165,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.2</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.3</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -798,8 +798,11 @@ const CHART_DEFAULTS = {
   responsive:true, maintainAspectRatio:false,
   plugins:{ legend:{ labels:{ color:'#5d6882', font:{ size:11 }, boxWidth:11 } } },
   scales:{
-    x:{ ticks:{ color:'#5d6882', font:{ size:10 } }, grid:{ color:'#1f2437' } },
-    y:{ ticks:{ color:'#5d6882', font:{ size:11 } }, grid:{ color:'#1f2437' }, beginAtZero:true }
+    // v12.3: grace dá "respiro" acima do maior valor, evitando que o rótulo
+    // desenhado pelo customDatalabels plugin (acima da barra) seja cortado
+    // quando a barra mais alta encosta no topo da área do gráfico.
+    x:{ ticks:{ color:'#5d6882', font:{ size:10 } }, grid:{ color:'#1f2437' }, grace:'12%' },
+    y:{ ticks:{ color:'#5d6882', font:{ size:11 } }, grid:{ color:'#1f2437' }, beginAtZero:true, grace:'12%' }
   }
 };
 
@@ -2769,6 +2772,7 @@ renderDrilldown(mat, desc, scroll = false) {
           y:{
             stacked:true,
             beginAtZero:true,
+            grace:'12%',
             ticks:{ color:'#5d6882', font:{size:10}, callback: v => v.toLocaleString('pt-BR') },
             grid:{ color:'#1f2437' },
             title:{ display:true, text:'Qtd Refugada (pç)', color:'#5d6882', font:{size:11} }
@@ -2808,7 +2812,7 @@ renderDrilldown(mat, desc, scroll = false) {
         indexAxis: 'y',
         plugins: { legend:{ display:false } },
         scales: {
-          x: { beginAtZero:true, ticks:{ color:'#5d6882', font:{size:10} }, grid:{ color:'#1f2437' } },
+          x: { beginAtZero:true, grace:'12%', ticks:{ color:'#5d6882', font:{size:10} }, grid:{ color:'#1f2437' } },
           y: { ticks:{ color:'#e8eaf2', font:{size:11} }, grid:{ display:false } }
         }
       }
@@ -4293,7 +4297,7 @@ const DashEq = {
         }}}},
         scales:{
           x:{ticks:{color:'#5d6882',font:{size:11}},grid:{display:false}},
-          y:{beginAtZero:true, ticks:{color:'#5d6882',font:{size:10}, callback:v=>M==='pct'?v.toFixed(1)+'%':M==='cost'?'R$'+Math.round(v).toLocaleString('pt-BR'):v.toLocaleString('pt-BR')}, grid:{color:'#1f2437'}}
+          y:{beginAtZero:true, grace:'12%', ticks:{color:'#5d6882',font:{size:10}, callback:v=>M==='pct'?v.toFixed(1)+'%':M==='cost'?'R$'+Math.round(v).toLocaleString('pt-BR'):v.toLocaleString('pt-BR')}, grid:{color:'#1f2437'}}
         }
       }
     });
@@ -4441,7 +4445,7 @@ const DashEq = {
         plugins:{...CHART_DEFAULTS.plugins, tooltip:{callbacks:{label:ctx=>ctx.dataset.yAxisID==='yVol'?`Vol. Produzido: ${ctx.raw.toLocaleString('pt-BR')} pç`:`${ctx.dataset.label}: ${ctx.raw.toLocaleString('pt-BR')} pç`}}},
         scales:{
           x:{stacked:true, grid:{display:false}, ticks:{color:'#5d6882',font:{size:10}}},
-          y:{stacked:true, beginAtZero:true, ticks:{color:'#5d6882',font:{size:10},callback:v=>v.toLocaleString('pt-BR')}, grid:{color:'#1f2437'}, title:{display:true,text:'Qtd Refugada (pç)',color:'#5d6882',font:{size:11}}},
+          y:{stacked:true, beginAtZero:true, grace:'12%', ticks:{color:'#5d6882',font:{size:10},callback:v=>v.toLocaleString('pt-BR')}, grid:{color:'#1f2437'}, title:{display:true,text:'Qtd Refugada (pç)',color:'#5d6882',font:{size:11}}},
           yVol:{display:false,beginAtZero:true,position:'right'}
         }
       }
@@ -4461,7 +4465,7 @@ const DashEq = {
         data:sorted.map(([,v])=>v), backgroundColor:'rgba(255,94,94,0.65)', borderColor:'#ff5e5e', borderWidth:1.5, borderRadius:4
       }]},
       options:{...CHART_DEFAULTS, indexAxis:'y', plugins:{legend:{display:false}},
-        scales:{ x:{beginAtZero:true,ticks:{color:'#5d6882',font:{size:10}},grid:{color:'#1f2437'}}, y:{ticks:{color:'#e8eaf2',font:{size:11}},grid:{display:false}} }
+        scales:{ x:{beginAtZero:true,grace:'12%',ticks:{color:'#5d6882',font:{size:10}},grid:{color:'#1f2437'}}, y:{ticks:{color:'#e8eaf2',font:{size:11}},grid:{display:false}} }
       }
     });
   },
