@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.5 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.6 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -165,7 +165,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.5</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.6</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -1392,6 +1392,15 @@ function scanRowText(row, maxCol) {
   return out.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
+// v12.6 — normaliza texto para "Proper Case" (primeira letra de CADA palavra
+// maiúscula, resto minúsculo), mesmo comportamento da função PROPER() do
+// Excel. Usado no campo Máquina, que vem digitado manualmente na planilha
+// com capitalização inconsistente (ex: "INJ 19", "inj 19", "Inj 19").
+function properCase(s) {
+  return String(s || '').trim().toLowerCase()
+    .replace(/(^|[^\p{L}])(\p{L})/gu, (m, sep, ch) => sep + ch.toUpperCase());
+}
+
 function getWeek(d) {
   const dt = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   const day = dt.getUTCDay() || 7;
@@ -1637,8 +1646,8 @@ function parseOcorrenciasWorkbook(wb) {
 
       if (row.every(c => c === null || c === undefined || String(c).trim() === '')) continue;
 
-      // Forward-fill Máquina (coluna B)
-      const maqCell = row[1] != null ? String(row[1]).trim() : '';
+      // Forward-fill Máquina (coluna B) — v12.6: normalizado com Proper Case
+      const maqCell = row[1] != null ? properCase(row[1]) : '';
       if (maqCell) lastMaq = maqCell;
 
       // Código: 7 primeiros dígitos; descarta linha se sobrar < 5 dígitos
