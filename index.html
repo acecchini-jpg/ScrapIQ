@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.3 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.5 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -165,7 +165,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.3</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.5</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -952,8 +952,21 @@ const Supa = {
     return rows;
   },
 
+  // v12.5: apaga em LOTES pequenos (busca chaves, deleta por lista) em vez de
+  // um único DELETE sem filtro — um DELETE gigante numa tabela com muitas
+  // linhas (ex: 'registros' com meses de Plano Diário) pode ultrapassar o
+  // statement_timeout do Postgres e falhar com HTTP 500 (57014), deixando
+  // a UI travada sem apagar nada (o timeout reverte a transação inteira).
   async clear(store) {
-    await this._req(`${this._base()}?store=eq.${store}`, { method: 'DELETE', headers: this._headers() });
+    const CHUNK = 300;
+    while (true) {
+      const r = await this._req(`${this._base()}?store=eq.${store}&select=key&limit=${CHUNK}`, { headers: this._headers() });
+      const rows = await r.json();
+      if (!rows.length) break;
+      const keys = rows.map(x => `"${String(x.key).replace(/"/g, '\\"')}"`).join(',');
+      await this._req(`${this._base()}?store=eq.${store}&key=in.(${keys})`, { method: 'DELETE', headers: this._headers() });
+      if (rows.length < CHUNK) break; // última página
+    }
   },
 
   async putMany(store, items) {
@@ -1366,6 +1379,19 @@ function extractDateDDMMFromFilename(name) {
   return { dd, mm };
 }
 
+// v12.4 — varre a linha inteira (não uma coluna fixa) em busca de texto de
+// sentinela. Rótulos em célula mesclada só populam a coluna-âncora do merge
+// no SheetJS; varrer a linha toda é imune a onde exatamente o merge ancorou.
+function scanRowText(row, maxCol) {
+  let out = '';
+  for (let c = 0; c <= maxCol; c++) {
+    if (row[c] !== undefined && row[c] !== null && String(row[c]).trim() !== '') {
+      out += ' ' + String(row[c]).replace(/\s+/g, ' ').trim();
+    }
+  }
+  return out.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 function getWeek(d) {
   const dt = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   const day = dt.getUTCDay() || 7;
@@ -1591,24 +1617,23 @@ function parseOcorrenciasWorkbook(wb) {
       if (!row) continue;
 
       // ── SENTINELAS DE FIM DE DADOS ────────────────────────────────
-      // v12.1 — Comparação por PREFIXO: os textos reais são "Total Geral
-      // Programado", "Total Programado Acabado" e "Número de faltas".
-      // Igualdade exata falhava silenciosamente e o parser seguia até o
-      // rodapé "TOP 3", que tem layout diferente e sobrescrevia os
-      // registros bons (mesma chave data|turno|codigo).
-      const colB = row[1] != null ? String(row[1]).replace(/\s+/g, ' ').trim() : '';
-      const colBn = colB.toLowerCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');   // remove acentos
-      if (colBn.startsWith('total geral programado') ||
-          colBn.startsWith('total programado') ||
-          colBn.startsWith('numero de faltas')) break;
+      // v12.4 — Comparação por VARREDURA DA LINHA INTEIRA, não mais de uma
+      // coluna fixa. Rótulos como "Total Geral Programado" e o cabeçalho do
+      // bloco "TOP 3" costumam estar em célula mesclada; o SheetJS só
+      // preenche o valor na coluna-âncora do merge (as demais voltam vazias
+      // por causa do defval:''). Checar só row[1]/row[3] falhava
+      // silenciosamente sempre que o merge ancorava em outra coluna — o
+      // parser seguia até o rodapé "TOP 3" e importava fragmentos de texto
+      // (ex.: descrição de produto) como se fossem Máquina. Ver diagnóstico
+      // do dia 28/05/2026 ("housing 5 hb" na coluna Máquina).
+      const rowScan = scanRowText(row, 12); // varre colunas A até M — folga confortável
 
-      // Rodapé "TOP 3 ITENS COM MAIOR NUMERO DE REFUGO": bloco de análise de
-      // causa, não é produção. Detecta em B ou D para resistir a mudanças de posição.
-      const colD = row[3] != null ? String(row[3]).replace(/\s+/g, ' ').trim() : '';
-      const scan = (colB + ' ' + colD).toLowerCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      if (scan.includes('maior numero de refugo') || scan.includes('nao programados')) break;
+      if (rowScan.includes('total geral programado') ||
+          rowScan.includes('total programado') ||
+          rowScan.includes('numero de faltas')) break;
+
+      if (rowScan.includes('maior numero de refugo') ||
+          rowScan.includes('nao programados')) break;
 
       if (row.every(c => c === null || c === undefined || String(c).trim() === '')) continue;
 
@@ -3655,117 +3680,149 @@ const UI = {
   async clearCosts() {
     if (!confirm('Deseja realmente apagar TODOS os dados da Área C — Custo?')) return;
     UI.spin('Limpando Área A...');
-    await DataService.clear('costs');
-    State.costs = {};
-    document.getElementById('d-cost').classList.remove('ok');
-    document.getElementById('s-cost').textContent = I18n.t('status.cost.init');
-    document.getElementById('cost-msg').textContent = '';
-    this.renderDBSummary();
-    this.renderClearWindows();
-    Dashboard.render();
-    UI.unspin();
-    this.toast('Área C — Custo limpa', 'ok');
+    try {
+      await DataService.clear('costs');
+      State.costs = {};
+      document.getElementById('d-cost').classList.remove('ok');
+      document.getElementById('s-cost').textContent = I18n.t('status.cost.init');
+      document.getElementById('cost-msg').textContent = '';
+      this.renderDBSummary();
+      this.renderClearWindows();
+      Dashboard.render();
+      this.toast('Área C — Custo limpa', 'ok');
+    } catch(e) {
+      dbgErr('clearCosts:', e);
+      this.toast('Erro ao limpar: ' + e.message, 'err');
+    } finally {
+      UI.unspin();
+    }
   },
 
   async clearScrap() {
     if (!confirm('Deseja realmente apagar TODOS os dados da Área A — Refugo?')) return;
     UI.spin('Limpando Área B...');
-    await DataService.clear('scrap');
-    State.scrap = [];
-    State.drillMat = null;
-    document.getElementById('d-scrap').classList.remove('ok');
-    document.getElementById('s-scrap').textContent = I18n.t('status.scrap.init');
-    document.getElementById('scrap-msg').textContent = '';
-    const ySel = document.getElementById('f-year-sel'); if (ySel) ySel.innerHTML = '<option value="">— Ano —</option>';
-    const mSel = document.getElementById('f-month-sel'); if (mSel) mSel.innerHTML = '<option value="">— Mês —</option>';
-    const wSel = document.getElementById('f-week-sel'); if (wSel) wSel.innerHTML = '<option value="">— Semana —</option>';
-    State.filterFrom = null; State.filterTo = null; State.filterMonth = null; State.filterWeek = null; State.filterYear = null;
-    this.renderDBSummary();
-    this.renderClearWindows();
-    if (typeof Dashboard !== 'undefined' && Dashboard.closeDrill) Dashboard.closeDrill();
-    Dashboard.render();
-    if (typeof DashEq !== 'undefined') { DashEq._initialized = false; }
-    UI.unspin();
-    this.toast('Área A — Refugo limpa', 'ok');
+    try {
+      await DataService.clear('scrap');
+      State.scrap = [];
+      State.drillMat = null;
+      document.getElementById('d-scrap').classList.remove('ok');
+      document.getElementById('s-scrap').textContent = I18n.t('status.scrap.init');
+      document.getElementById('scrap-msg').textContent = '';
+      const ySel = document.getElementById('f-year-sel'); if (ySel) ySel.innerHTML = '<option value="">— Ano —</option>';
+      const mSel = document.getElementById('f-month-sel'); if (mSel) mSel.innerHTML = '<option value="">— Mês —</option>';
+      const wSel = document.getElementById('f-week-sel'); if (wSel) wSel.innerHTML = '<option value="">— Semana —</option>';
+      State.filterFrom = null; State.filterTo = null; State.filterMonth = null; State.filterWeek = null; State.filterYear = null;
+      this.renderDBSummary();
+      this.renderClearWindows();
+      if (typeof Dashboard !== 'undefined' && Dashboard.closeDrill) Dashboard.closeDrill();
+      Dashboard.render();
+      if (typeof DashEq !== 'undefined') { DashEq._initialized = false; }
+      this.toast('Área A — Refugo limpa', 'ok');
+    } catch(e) {
+      dbgErr('clearScrap:', e);
+      this.toast('Erro ao limpar: ' + e.message, 'err');
+    } finally {
+      UI.unspin();
+    }
   },
 
   async clearOcorrencias() {
     if (!confirm('Deseja realmente apagar TODOS os dados da Área B — Produção?')) return;
     UI.spin('Limpando Área B...');
-    // v12.0: Plano Diário agora alimenta 'registros' (unificação Scrap Manager ↔ Dash SF).
-    // 'ocorrencias' fica intocado (dados históricos, sem migração) — não é mais alimentado.
-    await DataService.clear('registros');
-    DataService._db = null;
-    if (!Supa.active) { try { await DataService.open(); } catch(e) { dbgErr(e); } }
-    State.registros = [];
-    document.getElementById('d-ocorr').style.background = 'var(--border2)';
-    document.getElementById('s-ocorr').textContent = 'Ocorrências —';
-    const ocorrMsg = document.getElementById('ocorr-msg'); if (ocorrMsg) ocorrMsg.textContent = '';
-    this.renderDBSummary();
-    this.renderClearWindows();
-    Dashboard.render();
-    UI.unspin();
-    this.toast('Área B — Produção limpa', 'ok');
+    try {
+      // v12.0: Plano Diário agora alimenta 'registros' (unificação Scrap Manager ↔ Dash SF).
+      // 'ocorrencias' fica intocado (dados históricos, sem migração) — não é mais alimentado.
+      await DataService.clear('registros');
+      DataService._db = null;
+      if (!Supa.active) { try { await DataService.open(); } catch(e) { dbgErr(e); } }
+      State.registros = [];
+      document.getElementById('d-ocorr').style.background = 'var(--border2)';
+      document.getElementById('s-ocorr').textContent = 'Ocorrências —';
+      const ocorrMsg = document.getElementById('ocorr-msg'); if (ocorrMsg) ocorrMsg.textContent = '';
+      this.renderDBSummary();
+      this.renderClearWindows();
+      Dashboard.render();
+      this.toast('Área B — Produção limpa', 'ok');
+    } catch(e) {
+      dbgErr('clearOcorrencias:', e);
+      this.toast('Erro ao limpar: ' + e.message, 'err');
+    } finally {
+      UI.unspin();
+    }
   },
 
   async clearAliases() {
     if (!confirm('Deseja realmente apagar TODOS os dados da Área D — Equipamentos [Alias]?')) return;
     UI.spin('Limpando Área D...');
-    await DataService.clear('aliases');
-    State.aliases = {};
-    document.getElementById('d-alias').classList.remove('ok');
-    document.getElementById('s-alias').textContent = 'Alias —';
-    const aliasMsg = document.getElementById('alias-msg'); if (aliasMsg) aliasMsg.textContent = '';
-    this.renderDBSummary();
-    this.renderClearWindows();
-    if (typeof DashEq !== 'undefined') DashEq._initialized = false;
-    UI.unspin();
-    this.toast('Área D — Alias limpa', 'ok');
+    try {
+      await DataService.clear('aliases');
+      State.aliases = {};
+      document.getElementById('d-alias').classList.remove('ok');
+      document.getElementById('s-alias').textContent = 'Alias —';
+      const aliasMsg = document.getElementById('alias-msg'); if (aliasMsg) aliasMsg.textContent = '';
+      this.renderDBSummary();
+      this.renderClearWindows();
+      if (typeof DashEq !== 'undefined') DashEq._initialized = false;
+      this.toast('Área D — Alias limpa', 'ok');
+    } catch(e) {
+      dbgErr('clearAliases:', e);
+      this.toast('Erro ao limpar: ' + e.message, 'err');
+    } finally {
+      UI.unspin();
+    }
   },
 
   async clearAll() {
     if (!confirm('Deseja realmente apagar TODOS os dados locais de refugo, custos, ocorrências e alias?')) return;
     UI.spin('Limpando...');
-    await DataService.clearAll();
-    DataService._db = null;
-    if (!Supa.active) { try { await DataService.open(); } catch(e) { dbgErr(e); } }
-    State.costs = {};
-    State.scrap = [];
-    State.ocorrencias = [];
-    State.aliases = {};
-    State.drillMat = null;
-    
-    document.getElementById('d-cost').classList.remove('ok');
-    document.getElementById('s-cost').textContent = I18n.t('status.cost.init');
-    document.getElementById('d-scrap').classList.remove('ok');
-    document.getElementById('s-scrap').textContent = I18n.t('status.scrap.init');
-    document.getElementById('d-ocorr').style.background = 'var(--border2)';
-    document.getElementById('s-ocorr').textContent = 'Ocorrências —';
-    document.getElementById('d-alias').classList.remove('ok');
-    document.getElementById('s-alias').textContent = 'Alias —';
-    document.getElementById('cost-msg').textContent = '';
-    document.getElementById('scrap-msg').textContent = '';
-    const ocorrMsg = document.getElementById('ocorr-msg');
-    if (ocorrMsg) ocorrMsg.textContent = '';
-    const aliasMsg = document.getElementById('alias-msg');
-    if (aliasMsg) aliasMsg.textContent = '';
-    document.getElementById('db-summary').innerHTML = '';
-    document.getElementById('f-month-sel').innerHTML = '<option value="">— Mês —</option>';
-    document.getElementById('f-week-sel').innerHTML = '<option value="">— Semana —</option>';
-    document.getElementById('f-year-sel').innerHTML = '<option value="">— Ano —</option>';
-    document.getElementById('f-from').value = '';
-    document.getElementById('f-to').value = '';
-    document.getElementById('f-search-prod').value = '';
-    
-    State.filterFrom = null; State.filterTo = null;
-    State.filterMonth = null; State.filterWeek = null;
-    State.filterYear = null; State.filterSearch = '';
-    
-    Dashboard.closeDrill();
-    UI.unspin();
-    Dashboard.render();
-    this.renderClearWindows();
-    this.toast('Banco de dados local redefinido', 'ok');
+    try {
+      await DataService.clearAll();
+      DataService._db = null;
+      if (!Supa.active) { try { await DataService.open(); } catch(e) { dbgErr(e); } }
+      State.costs = {};
+      State.scrap = [];
+      State.ocorrencias = [];
+      State.registros = [];   // v12.0
+      State.stopcodes = [];   // v12.0
+      State.aliases = {};
+      State.drillMat = null;
+
+      document.getElementById('d-cost').classList.remove('ok');
+      document.getElementById('s-cost').textContent = I18n.t('status.cost.init');
+      document.getElementById('d-scrap').classList.remove('ok');
+      document.getElementById('s-scrap').textContent = I18n.t('status.scrap.init');
+      document.getElementById('d-ocorr').style.background = 'var(--border2)';
+      document.getElementById('s-ocorr').textContent = 'Ocorrências —';
+      document.getElementById('d-alias').classList.remove('ok');
+      document.getElementById('s-alias').textContent = 'Alias —';
+      document.getElementById('cost-msg').textContent = '';
+      document.getElementById('scrap-msg').textContent = '';
+      const ocorrMsg = document.getElementById('ocorr-msg');
+      if (ocorrMsg) ocorrMsg.textContent = '';
+      const aliasMsg = document.getElementById('alias-msg');
+      if (aliasMsg) aliasMsg.textContent = '';
+      document.getElementById('db-summary').innerHTML = '';
+      document.getElementById('f-month-sel').innerHTML = '<option value="">— Mês —</option>';
+      document.getElementById('f-week-sel').innerHTML = '<option value="">— Semana —</option>';
+      document.getElementById('f-year-sel').innerHTML = '<option value="">— Ano —</option>';
+      document.getElementById('f-from').value = '';
+      document.getElementById('f-to').value = '';
+      document.getElementById('f-search-prod').value = '';
+
+      State.filterFrom = null; State.filterTo = null;
+      State.filterMonth = null; State.filterWeek = null;
+      State.filterYear = null; State.filterSearch = '';
+
+      Dashboard.closeDrill();
+      Dashboard.render();
+      this.renderClearWindows();
+      this.toast('Banco de dados local redefinido', 'ok');
+    } catch(e) {
+      dbgErr('clearAll:', e);
+      this.toast('Erro ao limpar: ' + e.message, 'err');
+    } finally {
+      UI.unspin();
+    }
   },
 
   // ── Solicita data e exclui todos os registros de refugo do dia informado ──
