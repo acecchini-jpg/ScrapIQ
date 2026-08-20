@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.12 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.14 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -161,7 +161,7 @@ main{flex:1;display:flex;flex-direction:column}
 </style>
 </head>
 <body>
-<div id="spinner"><div class="spin"></div><span id="spin-msg" style="color:var(--text-dim);font-size:13px">Processando...</span></div>
+<div id="spinner"><div class="spin"></div><span id="spin-msg" style="color:#fff;font-size:13px;font-weight:500">Processando...</span></div>
 <div id="toast"></div>
 
 <div id="login-screen" style="display:none;position:fixed;inset:0;z-index:1000;background:var(--bg);align-items:center;justify-content:center">
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.12</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.14</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -1010,18 +1010,19 @@ const Supa = {
 
   // Leitura paginada: 1ª página traz o total (count=exact); demais em PARALELO
   // v12.8 — removido o `Prefer: count=exact` do carregamento principal.
-  // v12.12 — BUG CRÍTICO corrigido de novo, mesma categoria do v12.11: a
-  // correção anterior ainda assumia "resposta < pedido = fim dos dados" (só
-  // que comparando contra REQUEST em vez de PAGE) — e com REQUEST=3000 e um
-  // limite do servidor em 1000, essa comparação é SEMPRE verdadeira,
-  // fazendo o código parar sempre na 1ª página, não importa o tamanho real
-  // da tabela. A ÚNICA condição de parada confiável é uma página VAZIA (0
-  // linhas) — qualquer outra comparação de tamanho pode ser enganada por um
-  // limite do servidor. Isso abre mão de paralelismo por enquanto (uma
-  // requisição de cada vez) até confirmarmos que os totais batem; dá pra
-  // reintroduzir concorrência depois com segurança.
+  // v12.14 — reintroduz concorrência com segurança. O bug do v12.11 era UMA
+  // linha: um retorno antecipado comparando a 1ª resposta contra REQUEST (o
+  // que a gente PEDIU), não contra o que o servidor de fato entrega — com um
+  // limite do servidor abaixo de REQUEST essa comparação é sempre falsa
+  // positiva de "fim dos dados". Removida essa linha: a 1ª página só serve
+  // para DESCOBRIR o tamanho real por requisição (PAGE = first.length); as
+  // páginas seguintes usam esse valor CONFIRMADO (não mais um número
+  // assumido) para montar janelas paralelas — aí sim "resposta < PAGE" é uma
+  // condição de parada confiável, porque PAGE reflete o que o servidor
+  // comprovadamente entrega, não uma suposição.
   async _fetchPaged(store, select, mapFn, onProgress) {
     const REQUEST = 3000; // o que pedimos — o servidor pode limitar (db-max-rows)
+    const CONC = 2;
     const url = `${this._base()}?store=eq.${store}&select=${select}&order=key.asc`;
     const fetchRange = async (f, t) => {
       const r = await this._req(url, { headers: this._headers({ 'Range-Unit': 'items', 'Range': `${f}-${t}` }) });
@@ -1029,13 +1030,28 @@ const Supa = {
     };
 
     const rows = [];
-    let from = 0;
+    const first = await fetchRange(0, REQUEST - 1);
+    rows.push(...first);
+    if (onProgress) onProgress(rows.length, store);
+    if (first.length === 0) return rows;
+
+    const PAGE = first.length; // tamanho REAL confirmado pelo servidor
+    let from = PAGE;
     while (true) {
-      const b = await fetchRange(from, from + REQUEST - 1);
-      rows.push(...b);
-      if (onProgress) onProgress(rows.length, store);
-      if (b.length === 0) break;   // ÚNICA condição segura de "acabou"
-      from += b.length;            // avança pelo que REALMENTE veio, não pelo pedido
+      const reqs = [];
+      for (let i = 0; i < CONC; i++) {
+        const f = from + i * PAGE, t = f + PAGE - 1;
+        reqs.push(fetchRange(f, t));
+      }
+      const batches = await Promise.all(reqs);
+      let stop = false;
+      for (const b of batches) {
+        rows.push(...b);
+        if (onProgress) onProgress(rows.length, store);
+        if (b.length < PAGE) { stop = true; break; }
+      }
+      if (stop) break;
+      from += CONC * PAGE;
     }
     return rows;
   },
