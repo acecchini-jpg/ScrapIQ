@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.10 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.11 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.10</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.11</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -1010,24 +1010,37 @@ const Supa = {
 
   // Leitura paginada: 1ª página traz o total (count=exact); demais em PARALELO
   // v12.8 — removido o `Prefer: count=exact` do carregamento principal.
-  // Esse count força o Postgres a computar um count(*) exato (mais caro ainda
-  // com RLS ativo, que soma o custo da política por linha), e foi a causa
-  // do timeout 57014 no boot/login com a tabela 'scrap' já grande. Agora
-  // busca em "ondas" de páginas em paralelo, sem saber o total de antemão,
-  // parando assim que uma página vier incompleta (< PAGE linhas).
+  // v12.11 — BUG CRÍTICO corrigido: o PostgREST limita o tamanho da resposta
+  // (db-max-rows, geralmente 1000) INDEPENDENTE do Range pedido — pedir
+  // 0-2999 podia devolver só 1000 linhas, sem aviso. O código antigo assumia
+  // que "resposta menor que o PAGE pedido" = fim dos dados, então parava na
+  // 1ª página, perdendo o resto (ex: Refugo carregando só 1000 de milhares).
+  // Agora a 1ª página é buscada sozinha para DESCOBRIR o tamanho real que o
+  // servidor está devolvendo, e as páginas seguintes usam esse valor
+  // confirmado — nunca mais um tamanho "assumido" que pode estar errado.
   async _fetchPaged(store, select, mapFn, onProgress) {
-    const PAGE = 3000, CONC = 2;
+    const REQUEST = 3000; // o que pedimos — o servidor pode limitar (db-max-rows)
+    const CONC = 2;
     const url = `${this._base()}?store=eq.${store}&select=${select}&order=key.asc`;
+    const fetchRange = async (f, t) => {
+      const r = await this._req(url, { headers: this._headers({ 'Range-Unit': 'items', 'Range': `${f}-${t}` }) });
+      return mapFn(await r.json());
+    };
+
     const rows = [];
-    let from = 0;
+    const first = await fetchRange(0, REQUEST - 1);
+    rows.push(...first);
+    if (onProgress) onProgress(rows.length, store);
+    if (first.length === 0) return rows;
+    if (first.length < REQUEST) return rows; // veio tudo numa página só
+
+    const PAGE = first.length; // tamanho REAL confirmado pelo servidor
+    let from = PAGE;
     while (true) {
       const reqs = [];
       for (let i = 0; i < CONC; i++) {
         const f = from + i * PAGE, t = f + PAGE - 1;
-        reqs.push(
-          this._req(url, { headers: this._headers({ 'Range-Unit': 'items', 'Range': `${f}-${t}` }) })
-            .then(r => r.json()).then(j => mapFn(j))
-        );
+        reqs.push(fetchRange(f, t));
       }
       const batches = await Promise.all(reqs);
       let stop = false;
@@ -5708,9 +5721,9 @@ async function boot() {
       document.getElementById('d-cost').classList.add('ok');
       document.getElementById('s-cost').textContent = `Custo: ${costs.length}`;
     }
-    if (State.ocorrencias.length) {
+    if (State.registros.length) {
       document.getElementById('d-ocorr').style.background = 'var(--purple)';
-      document.getElementById('s-ocorr').textContent = `${I18n.t('status.ocorr')}: ${State.ocorrencias.length}`;
+      document.getElementById('s-ocorr').textContent = `${I18n.t('status.ocorr')}: ${State.registros.length}`;
     }
     const na = Object.keys(State.aliases).length;
     if (na) {
