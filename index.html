@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.7 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.8 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.7</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.8</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -1009,29 +1009,35 @@ const Supa = {
   },
 
   // Leitura paginada: 1ª página traz o total (count=exact); demais em PARALELO
+  // v12.8 — removido o `Prefer: count=exact` do carregamento principal.
+  // Esse count força o Postgres a computar um count(*) exato (mais caro ainda
+  // com RLS ativo, que soma o custo da política por linha), e foi a causa
+  // do timeout 57014 no boot/login com a tabela 'scrap' já grande. Agora
+  // busca em "ondas" de páginas em paralelo, sem saber o total de antemão,
+  // parando assim que uma página vier incompleta (< PAGE linhas).
   async _fetchPaged(store, select, mapFn) {
-    const PAGE = 1000;
+    const PAGE = 1000, CONC = 4;
     const url = `${this._base()}?store=eq.${store}&select=${select}&order=key.asc`;
-    const first = await this._req(url, {
-      headers: this._headers({ 'Range-Unit': 'items', 'Range': `0-${PAGE-1}`, 'Prefer': 'count=exact' })
-    });
-    const rows = mapFn(await first.json());
-    const cr = first.headers.get('content-range') || '';
-    const total = parseInt(cr.split('/')[1]) || rows.length;
-    if (total <= PAGE) return rows;
-    // Demais páginas em paralelo (concorrência limitada a 6)
-    const ranges = [];
-    for (let from = PAGE; from < total; from += PAGE) ranges.push([from, Math.min(from + PAGE - 1, total - 1)]);
-    const CONC = 6;
-    const results = new Array(ranges.length);
-    for (let i = 0; i < ranges.length; i += CONC) {
-      const batch = ranges.slice(i, i + CONC).map(async ([f, t], j) => {
-        const r = await this._req(url, { headers: this._headers({ 'Range-Unit': 'items', 'Range': `${f}-${t}` }) });
-        results[i + j] = mapFn(await r.json());
-      });
-      await Promise.all(batch);
+    const rows = [];
+    let from = 0;
+    while (true) {
+      const reqs = [];
+      for (let i = 0; i < CONC; i++) {
+        const f = from + i * PAGE, t = f + PAGE - 1;
+        reqs.push(
+          this._req(url, { headers: this._headers({ 'Range-Unit': 'items', 'Range': `${f}-${t}` }) })
+            .then(r => r.json()).then(j => mapFn(j))
+        );
+      }
+      const batches = await Promise.all(reqs);
+      let stop = false;
+      for (const b of batches) {
+        rows.push(...b);
+        if (b.length < PAGE) { stop = true; break; }
+      }
+      if (stop) break;
+      from += CONC * PAGE;
     }
-    results.forEach(batch => rows.push(...batch));
     return rows;
   },
 
