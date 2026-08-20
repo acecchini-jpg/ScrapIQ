@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.8 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.9 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.8</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.9</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -1016,7 +1016,12 @@ const Supa = {
   // busca em "ondas" de páginas em paralelo, sem saber o total de antemão,
   // parando assim que uma página vier incompleta (< PAGE linhas).
   async _fetchPaged(store, select, mapFn) {
-    const PAGE = 1000, CONC = 4;
+    // v12.9 — reduzido de CONC:4/PAGE:1000 para CONC:2/PAGE:500. Diagnóstico
+    // real: consulta isolada de 1000 linhas levou ~5.7s no gateway (execução
+    // no Postgres: 1.3ms via EXPLAIN ANALYZE) — o gargalo é o pool de conexões
+    // do projeto, não a query. 4 requisições simultâneas competiam pelo pool
+    // e estouravam o statement_timeout à espera de uma conexão livre.
+    const PAGE = 500, CONC = 2;
     const url = `${this._base()}?store=eq.${store}&select=${select}&order=key.asc`;
     const rows = [];
     let from = 0;
@@ -1064,7 +1069,7 @@ const Supa = {
     const byKey = new Map();
     items.forEach(it => byKey.set(this.keyOf(store, it), it));
     const unique = [...byKey.entries()].map(([key, it]) => ({ store, key, doc: it }));
-    const CHUNK = 500, CONC = 4;
+    const CHUNK = 500, CONC = 2; // v12.9: reduzido de 4 — mesmo gargalo de pool de conexões
     const chunks = [];
     for (let i = 0; i < unique.length; i += CHUNK) chunks.push(unique.slice(i, i + CHUNK));
     // Envio em PARALELO com concorrência limitada
