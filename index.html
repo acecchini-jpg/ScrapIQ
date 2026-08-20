@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.9 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.10 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.9</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.10</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -989,8 +989,8 @@ const Supa = {
     return true;
   },
 
-  async getAll(store) {
-    return this._fetchPaged(store, 'doc', rows => rows.map(x => x.doc));
+  async getAll(store, onProgress) {
+    return this._fetchPaged(store, 'doc', rows => rows.map(x => x.doc), onProgress);
   },
 
   // Somente as chaves — payload ~50x menor; usado para dedup em importações
@@ -1015,13 +1015,8 @@ const Supa = {
   // do timeout 57014 no boot/login com a tabela 'scrap' já grande. Agora
   // busca em "ondas" de páginas em paralelo, sem saber o total de antemão,
   // parando assim que uma página vier incompleta (< PAGE linhas).
-  async _fetchPaged(store, select, mapFn) {
-    // v12.9 — reduzido de CONC:4/PAGE:1000 para CONC:2/PAGE:500. Diagnóstico
-    // real: consulta isolada de 1000 linhas levou ~5.7s no gateway (execução
-    // no Postgres: 1.3ms via EXPLAIN ANALYZE) — o gargalo é o pool de conexões
-    // do projeto, não a query. 4 requisições simultâneas competiam pelo pool
-    // e estouravam o statement_timeout à espera de uma conexão livre.
-    const PAGE = 500, CONC = 2;
+  async _fetchPaged(store, select, mapFn, onProgress) {
+    const PAGE = 3000, CONC = 2;
     const url = `${this._base()}?store=eq.${store}&select=${select}&order=key.asc`;
     const rows = [];
     let from = 0;
@@ -1038,6 +1033,7 @@ const Supa = {
       let stop = false;
       for (const b of batches) {
         rows.push(...b);
+        if (onProgress) onProgress(rows.length, store);
         if (b.length < PAGE) { stop = true; break; }
       }
       if (stop) break;
@@ -1153,7 +1149,7 @@ const DataService = {
     });
   },
 
-  getAll(store)    { if (Supa.active) return Supa.getAll(store); return this._tx(store,'readonly', s => s.getAll()); },
+  getAll(store, onProgress) { if (Supa.active) return Supa.getAll(store, onProgress); return this._tx(store,'readonly', s => s.getAll()); },
   clear(store)     { if (Supa.active) return Supa.clear(store); return this._tx(store,'readwrite', s => s.clear()); },
   async putMany(store, items) {
     if (Supa.active) return Supa.putMany(store, items);
@@ -1284,8 +1280,10 @@ const DataService = {
   async loadAll() {
     // v11.8-perf: stores em paralelo (antes: sequencial)
     // v12.0: + registros/stopcodes (unificação Scrap Manager ↔ Dash SF)
+    // v12.10: progresso visível na store dominante (scrap), pra não parecer travado
+    const onProgress = (n) => { try { UI.spin(`Carregando refugo... ${n.toLocaleString('pt-BR')} registros`); } catch(e) {} };
     const [costs, scrap, ocorrencias, aliases, registros, stopcodes] = await Promise.all([
-      this.getAll('costs'), this.getAll('scrap'), this.getAll('ocorrencias'), this.getAll('aliases'),
+      this.getAll('costs'), this.getAll('scrap', onProgress), this.getAll('ocorrencias'), this.getAll('aliases'),
       this.getAll('registros'), this.getAll('stopcodes')
     ]);
     return { costs, scrap, ocorrencias, aliases, registros, stopcodes };
