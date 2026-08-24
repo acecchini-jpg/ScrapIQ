@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.14 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.15 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.14</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.15</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -998,6 +998,19 @@ const Supa = {
     return this._fetchPaged(store, 'key', rows => rows.map(x => x.key));
   },
 
+  // v12.15 — dedup de importação ESCOPADA por data: baixa só as chaves das
+  // datas presentes no arquivo, não a tabela inteira. Antes da correção da
+  // paginação (v12.14), o Refugo ficava travado em 1000 registros e a
+  // dedup "parecia" rápida por acidente — agora que carrega ~96 mil de
+  // verdade, baixar TODAS as chaves a cada importação ficou lento. Arquivos
+  // de produção normalmente cobrem só alguns dias, então filtrar por data
+  // reduz a busca de "chave por chave da tabela inteira" para "só o que
+  // pode colidir com este arquivo".
+  async getKeysForDateRange(store, dateField, fromDate, toDate) {
+    const qs = `&doc->>${dateField}=gte.${encodeURIComponent(fromDate)}&doc->>${dateField}=lte.${encodeURIComponent(toDate)}`;
+    return this._fetchPaged(store, 'key', rows => rows.map(x => x.key), null, qs);
+  },
+
   // Contagem sem baixar dados (Range 0-0 + count=exact → Content-Range: 0-0/total)
   async count(store) {
     const r = await this._req(`${this._base()}?store=eq.${store}&select=key`, {
@@ -1020,10 +1033,10 @@ const Supa = {
   // assumido) para montar janelas paralelas — aí sim "resposta < PAGE" é uma
   // condição de parada confiável, porque PAGE reflete o que o servidor
   // comprovadamente entrega, não uma suposição.
-  async _fetchPaged(store, select, mapFn, onProgress) {
+  async _fetchPaged(store, select, mapFn, onProgress, extraQS) {
     const REQUEST = 3000; // o que pedimos — o servidor pode limitar (db-max-rows)
     const CONC = 2;
-    const url = `${this._base()}?store=eq.${store}&select=${select}&order=key.asc`;
+    const url = `${this._base()}?store=eq.${store}&select=${select}${extraQS || ''}&order=key.asc`;
     const fetchRange = async (f, t) => {
       const r = await this._req(url, { headers: this._headers({ 'Range-Unit': 'items', 'Range': `${f}-${t}` }) });
       return mapFn(await r.json());
@@ -1183,8 +1196,19 @@ const DataService = {
 
   async appendScrap(rows) {
     if (Supa.active) {
-      // Dedup por chaves-somente: payload mínimo em vez de baixar a tabela inteira
-      const existKeys = new Set(await Supa.getKeys('scrap'));
+      // v12.15 — dedup ESCOPADA por data: baixar TODAS as chaves de 'scrap'
+      // a cada importação ficou caro depois que a paginação passou a trazer
+      // o total real (~96 mil). Um arquivo de produção normalmente cobre só
+      // alguns dias, então filtramos a busca de chaves pelo intervalo de
+      // datas do próprio arquivo — reduz drasticamente o que precisa ser
+      // baixado, sem mudar o resultado da deduplicação.
+      const dates = rows.map(r => r.date).filter(Boolean).sort();
+      let existKeys;
+      if (dates.length) {
+        existKeys = new Set(await Supa.getKeysForDateRange('scrap', 'date', dates[0], dates[dates.length - 1]));
+      } else {
+        existKeys = new Set(await Supa.getKeys('scrap')); // fallback raro: linhas sem data
+      }
       const fresh     = rows.filter(r => !existKeys.has(String(r.id)));
       const ignored   = rows.filter(r =>  existKeys.has(String(r.id)));
       if (fresh.length) await Supa.putMany('scrap', fresh);
