@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.15 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.16 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.15</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.16</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -1212,14 +1212,14 @@ const DataService = {
       const fresh     = rows.filter(r => !existKeys.has(String(r.id)));
       const ignored   = rows.filter(r =>  existKeys.has(String(r.id)));
       if (fresh.length) await Supa.putMany('scrap', fresh);
-      return { added: fresh.length, ignored };
+      return { added: fresh.length, ignored, fresh };
     }
     const existing = await this.getAll('scrap');
     const existKeys = new Set(existing.map(r => r.id));
     const fresh     = rows.filter(r => !existKeys.has(r.id));
     const ignored   = rows.filter(r =>  existKeys.has(r.id));
     if (fresh.length) await this.putMany('scrap', fresh);
-    return { added: fresh.length, ignored };
+    return { added: fresh.length, ignored, fresh };
   },
 
   // v11.12: SUBSTITUIÇÃO por data — ao importar um arquivo, todos os registros
@@ -3112,6 +3112,8 @@ const UI = {
     let totalRemoved = 0;
     let totalStopCodes = 0;
     const allDates = new Set();
+    const allNewRegistros = [];   // v12.16: acumula pra mesclar em memória no final
+    const allNewStopCodes = [];
     try {
       for (const file of files) {
         UI.spin(`Lendo ${file.name}...`);
@@ -3142,17 +3144,29 @@ const UI = {
         if (stopcodes.length) {
           await DataService.upsertStopCodes(stopcodes);
           totalStopCodes += stopcodes.length;
+          allNewStopCodes.push(...stopcodes);
         }
         if (registros.length) {
           const { added, removed, dates } = await DataService.appendRegistros(registros);
           totalAdded += added;
           totalRemoved += (removed || 0);
           (dates || []).forEach(d => allDates.add(d));
+          allNewRegistros.push(...registros);
         }
       }
-      const all = await DataService.getAll('registros');
-      State.registros = all;
-      State.stopcodes = await DataService.getAll('stopcodes');
+      // v12.16 — mescla em memória em vez de recarregar as tabelas inteiras.
+      // Antes fazia `DataService.getAll('registros')` + `getAll('stopcodes')`
+      // aqui, baixando os ~31 mil registros de novo a cada importação (era o
+      // "lento no final" reportado) — desnecessário, já sabemos exatamente
+      // quais datas foram substituídas e quais linhas/motivos são novos.
+      State.registros = State.registros.filter(r => !allDates.has(r.data));
+      State.registros.push(...allNewRegistros);
+      if (allNewStopCodes.length) {
+        const scMap = new Map(State.stopcodes.map(s => [s.code, s]));
+        allNewStopCodes.forEach(s => scMap.set(s.code, s));
+        State.stopcodes = [...scMap.values()];
+      }
+      const all = State.registros;
       const dateList = [...allDates].sort();
       const dateLabel = dateList.length === 1 ? dateList[0] : `${dateList.length} datas`;
       const msg = totalRemoved > 0
@@ -3207,11 +3221,17 @@ const UI = {
       this.toast('Nenhum registro válido encontrado no Plano Diário', 'warn');
       return;
     }
-    if (stopcodes.length) await DataService.upsertStopCodes(stopcodes);
+    if (stopcodes.length) {
+      await DataService.upsertStopCodes(stopcodes);
+      const scMap = new Map(State.stopcodes.map(s => [s.code, s]));
+      stopcodes.forEach(s => scMap.set(s.code, s));
+      State.stopcodes = [...scMap.values()];
+    }
     const { added, removed, dates } = await DataService.appendRegistros(registros);
-    const all = await DataService.getAll('registros');
-    State.registros = all;
-    State.stopcodes = await DataService.getAll('stopcodes');
+    // v12.16 — mescla em memória em vez de recarregar 'registros' inteiro
+    State.registros = State.registros.filter(r => !dates.includes(r.data));
+    State.registros.push(...registros);
+    const all = State.registros;
     const dateLabel = dates.length === 1 ? dates[0] : `${dates.length} datas`;
     const msg = removed > 0
       ? `✓ ${added} registros importados para ${dateLabel} — ${removed} registro(s) anterior(es) dessa(s) data(s) foram substituídos (total: ${all.length})`
@@ -3278,11 +3298,14 @@ const UI = {
       const items = parseCostRows(rows);
       if (!items.length) { this.toast('Nenhum código de custo válido extraído (Col A de 7 dígitos numericos)','err'); return; }
       await DataService.saveCosts(items);
-      
-      const { scrap } = await DataService.loadAll();
+
+      // v12.16 — removido `DataService.loadAll()` daqui: importar custos não
+      // toca em 'scrap' nenhum, então recarregar a tabela inteira (~96 mil
+      // linhas, mesmo custo de tempo do bug do refugo) era puro desperdício.
+      // State.scrap já está correto em memória — só precisa reaplicar a
+      // descrição do material nas linhas de refugo com os custos novos.
       State.costs = {};
       items.forEach(c => { State.costs[c.materialCode] = { materialDesc:c.materialDesc, unitCost:c.unitCost }; });
-      State.scrap = scrap;
       this._enrichDescs();
       
       document.getElementById('cost-msg').innerHTML = `<span style="color:var(--green)">✓ ${items.length} itens de custo carregados</span>`;
@@ -3305,7 +3328,7 @@ const UI = {
 
 
       const items = parseScrapRows(rows);
-      const { added, ignored } = await DataService.appendScrap(items);
+      const { added, ignored, fresh } = await DataService.appendScrap(items);
       
       if (ignored.length > 0) {
         const lines = [
@@ -3335,8 +3358,12 @@ const UI = {
       } else if (added === 0) {
         this.toast('Nenhum registro novo (todos já existiam).','warn');
       } else {
-        const all = await DataService.getAll('scrap');
-        State.scrap = all;
+        // v12.16 — mescla em memória em vez de recarregar a tabela inteira.
+        // Antes fazia `DataService.getAll('scrap')` aqui, que baixava as ~96
+        // mil linhas de novo a cada importação (98 requisições, ~140s no
+        // teste real) — desnecessário, já que só as linhas NOVAS (`fresh`)
+        // precisam entrar em State.scrap; o resto já estava carregado.
+        State.scrap.push(...fresh);
         this._enrichDescs();
 
         // ── F6: mini-relatório pós-importação ──
