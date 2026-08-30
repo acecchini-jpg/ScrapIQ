@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.17 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.19 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.17</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.19</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -212,7 +212,7 @@ main{flex:1;display:flex;flex-direction:column}
       <span id="logout-email" style="font-size:10px"></span>
     </button>
     <button id="audit-icon" onclick="AuditMode.toggle(false)" title="Sair do Modo Auditoria" style="display:none;padding:5px 9px;background:rgba(176,108,255,.12);border:1px solid rgba(176,108,255,.4);border-radius:6px;color:var(--purple);font-size:14px;cursor:pointer;line-height:1;align-items:center">🕵️‍♂️</button>
-    <button id="theme-toggle" onclick="UI.toggleThemeOrAdmin(event)" title="Alternar Tema (Shift+Clique para mostrar/ocultar abas admin)" style="padding:5px 9px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text-muted);font-size:14px;cursor:pointer;line-height:1;display:flex;align-items:center">🌙</button>
+    <button id="theme-toggle" onclick="UI.toggleThemeOrAdmin(event)" ontouchstart="UI.themeTouchStart(event)" ontouchend="UI.themeTouchEnd(event)" ontouchmove="UI.themeTouchCancel()" ontouchcancel="UI.themeTouchCancel()" title="Alternar Tema (Shift+Clique ou toque longo para mostrar/ocultar abas admin)" style="padding:5px 9px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text-muted);font-size:14px;cursor:pointer;line-height:1;display:flex;align-items:center">🌙</button>
   </div>
 </header>
 
@@ -3781,6 +3781,27 @@ const UI = {
     DashEq.renderTemporal();
   },
 
+  // v12.19 — clique longo (toque) equivalente ao Shift+Clique, pra acessar
+  // as abas admin no celular (onde não existe tecla Shift).
+  _themeTouchTimer: null,
+  _themeLongPressFired: false,
+  themeTouchStart(event) {
+    this._themeLongPressFired = false;
+    clearTimeout(this._themeTouchTimer);
+    this._themeTouchTimer = setTimeout(() => {
+      this._themeLongPressFired = true;
+      if (navigator.vibrate) { try { navigator.vibrate(30); } catch(e) {} }
+      this.toggleThemeOrAdmin({ shiftKey: true }); // reaproveita a mesma lógica do Shift+Clique
+    }, 600);
+  },
+  themeTouchEnd(event) {
+    clearTimeout(this._themeTouchTimer);
+    if (this._themeLongPressFired && event && event.preventDefault) event.preventDefault(); // evita disparar o clique normal (tema) em seguida
+  },
+  themeTouchCancel() {
+    clearTimeout(this._themeTouchTimer);
+  },
+
   toggleThemeOrAdmin(event) {
     if (event && event.shiftKey) {
       // Shift+clique: alterna visibilidade das abas admin
@@ -5504,11 +5525,21 @@ const AuditMode = {
     const realIdx = scrapRate(def, qty);
     const shownIdx = this.transformPct(realIdx);
 
+    // v12.18 — CORREÇÃO DE CONSISTÊNCIA: antes, "Refugo" mostrava a
+    // quantidade REAL enquanto "Índice" mostrava o valor TRANSFORMADO — os
+    // dois números não batiam entre si (ex: 25 refugo em 100 peças exibia
+    // "5%", quando 25/125=20%). Agora mantemos Produção real fixa e
+    // recalculamos o Refugo exibido de trás pra frente, de forma que
+    // Refugo_exibido / (Produção + Refugo_exibido) = Índice_exibido — os
+    // três números na tela sempre fecham a conta entre si.
+    const idxFrac = Math.min(shownIdx, 99.999) / 100; // trava contra divisão por zero em 100%
+    const shownDef = idxFrac > 0 ? (idxFrac * qty) / (1 - idxFrac) : 0;
+
     const elIdx = document.getElementById('audit-k-idx');
     const elQty = document.getElementById('audit-k-scrap');
     const elProd = document.getElementById('audit-k-prod');
     if (elIdx)  elIdx.textContent  = shownIdx.toFixed(2) + '%';
-    if (elQty)  elQty.textContent  = def.toLocaleString('pt-BR');
+    if (elQty)  elQty.textContent  = Math.round(shownDef).toLocaleString('pt-BR');
     if (elProd) elProd.textContent = qty.toLocaleString('pt-BR');
 
     // Pareto de defeitos — cada barra também passa pela transformação de faixas
