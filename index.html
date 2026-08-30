@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.19 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.20 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.19</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.20</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -223,7 +223,7 @@ main{flex:1;display:flex;flex-direction:column}
   <button class="tab-btn" data-tab="pdm" onclick="UI.switchTab('pdm')" data-i18n="tab.pdm">Resumo PDM</button>
   <button class="tab-btn admin-tab" data-tab="import" onclick="UI.switchTab('import')" style="display:none" data-i18n="tab.import">Importar Dados</button>
   <button class="tab-btn admin-tab" data-tab="config" onclick="UI.switchTab('config')" style="display:none" data-i18n="tab.config">Configurações</button>
-  <button class="tab-btn audit-tab" data-tab="audit" onclick="UI.switchTab('audit')" style="display:none" data-i18n="tab.audit">Modo Auditoria</button>
+  <button class="tab-btn audit-tab" data-tab="audit" onclick="UI.switchTab('audit')" style="display:none">Refugo</button>
 </div>
 
 <main>
@@ -718,15 +718,70 @@ create policy "scrapiq_all" on scrapiq_store
 </div>
 
 <div id="view-audit" class="tab-view">
-  <div style="background:rgba(176,108,255,.08);border:1px solid rgba(176,108,255,.3);border-radius:8px;padding:10px 16px;margin-bottom:16px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--purple)">
-    🕵️‍♂️ <span data-i18n="audit.banner">Modo Auditoria — visão simplificada e curada dos dados de refugo.</span>
+
+  <div class="filter-bar">
+    <div class="filter-row">
+      <span class="flabel">Período</span>
+      <input type="date" class="finput" id="audit-f-from" onchange="AuditMode.onDateChange()">
+      <button type="button" onclick="AuditMode.copyFromToTo()" title="Copiar data de início para data fim" style="padding:4px 7px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text-muted);font-size:12px;cursor:pointer;line-height:1;display:flex;align-items:center">➡️</button>
+      <input type="date" class="finput" id="audit-f-to" onchange="AuditMode.onDateChange()">
+      <select class="fselect" id="audit-f-year-sel" onchange="AuditMode.onYearChange()" title="Filtrar por Ano" style="min-width:90px">
+        <option value="">— Ano —</option>
+      </select>
+      <select class="fselect" id="audit-f-month-sel" onchange="AuditMode.onMonthWeekChange('month')" title="Filtrar por Mês">
+        <option value="">— Mês —</option>
+      </select>
+      <select class="fselect" id="audit-f-week-sel" onchange="AuditMode.onMonthWeekChange('week')" title="Filtrar por Semana">
+        <option value="">— Semana —</option>
+      </select>
+      <span class="flabel" style="margin-left:4px">Agrupar por</span>
+      <select class="fselect" id="audit-scope-sel" onchange="AuditMode.onScopeChange()">
+        <option value="year">Anual</option>
+        <option value="month">Mensal</option>
+        <option value="week">Semanal</option>
+        <option value="day" selected>Diário</option>
+      </select>
+      <input type="text" class="finput fsearch" id="audit-f-search" placeholder="Código ou nome do produto..." oninput="AuditMode.onSearchChange()" autocomplete="off">
+    </div>
+    <div class="filter-row">
+      <span class="flabel">Métrica</span>
+      <div class="tog" id="audit-metric-tog">
+        <button class="togbtn active" id="audit-gm-qty" onclick="AuditMode.setGlobalMetric('qty')">Qtd</button>
+        <button class="togbtn" id="audit-gm-pct" onclick="AuditMode.setGlobalMetric('pct')">Índice %</button>
+      </div>
+      <span class="flabel" style="margin-left:8px">Turnos</span>
+      <div class="shift-tog" id="audit-shift-toggles"></div>
+      <button onclick="AuditMode.clearFilters()" style="margin-left:auto;padding:5px 13px;background:rgba(255,94,94,.1);border:1px solid rgba(255,94,94,.35);border-radius:6px;color:#ff5e5e;font-size:11px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif">✕ Limpar Filtros</button>
+    </div>
   </div>
+
   <div class="kpi-grid" style="margin-bottom:20px">
-    <div class="kpi c1"><div class="kpi-lbl">Peças Boas</div><div class="kpi-val" id="audit-k-prod">—</div></div>
-    <div class="kpi c2"><div class="kpi-lbl">Refugo</div><div class="kpi-val" id="audit-k-scrap">—</div></div>
-    <div class="kpi c3"><div class="kpi-lbl">Índice de Refugo</div><div class="kpi-val" id="audit-k-idx">—</div></div>
+    <div class="kpi c1"><div class="kpi-lbl">Total Peças Boas</div><div class="kpi-val" id="audit-k-prod">—</div></div>
+    <div class="kpi c2"><div class="kpi-lbl">Total Scrap</div><div class="kpi-val" id="audit-k-scrap">—</div></div>
+    <div class="kpi c3"><div class="kpi-lbl">Índice de Scrap</div><div class="kpi-val" id="audit-k-idx">—</div></div>
   </div>
+
   <div class="chart-card chart-grid-full">
+    <div class="chart-title"><span>Evolução Temporal</span></div>
+    <div class="chart-h300"><canvas id="chart-audit-temporal"></canvas></div>
+  </div>
+
+  <div class="chart-card chart-grid-full" style="margin-top:14px">
+    <div class="chart-title"><span>Distribuição de Defeitos por Turno</span></div>
+    <div class="chart-h300"><canvas id="chart-audit-shiftdist"></canvas></div>
+  </div>
+
+  <div class="chart-card chart-grid-full" style="margin-top:14px">
+    <div class="chart-title">
+      <span>Pareto de Produtos</span>
+      <input type="number" class="num-input" id="audit-top-n" value="10" min="3" max="30" onchange="AuditMode.render()" style="margin-left:auto">
+    </div>
+    <div class="chart-h300"><canvas id="chart-audit-product-pareto"></canvas></div>
+  </div>
+
+  <div id="audit-drilldown" style="margin-top:14px"></div>
+
+  <div class="chart-card chart-grid-full" style="margin-top:14px">
     <div class="chart-title"><span>Principais Defeitos</span></div>
     <div class="chart-h300"><canvas id="chart-audit-pareto"></canvas></div>
   </div>
@@ -3120,6 +3175,9 @@ const UI = {
   switchTab(tab) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab===tab));
     document.querySelectorAll('.tab-view').forEach(v => v.classList.toggle('active', v.id==='view-'+tab));
+    // v12.20 — aba Refugo (Modo Auditoria) é sempre em português, isolada
+    const langToggles = document.getElementById('lang-toggles');
+    if (langToggles) langToggles.style.display = (tab === 'audit') ? 'none' : '';
     if (tab === 'import') { this.renderDBSummary(); this.renderClearWindows(); }
     if (tab === 'pdm')    { PDM.init(); }
     if (tab === 'strat')  { Strat.render(); }
@@ -4166,6 +4224,23 @@ const UI = {
 // DASHBOARD POR EQUIPAMENTO — Estado e Controlador independentes
 // Não compartilha nem altera nenhuma variável do Dashboard atual.
 // ═══════════════════════════════════════════════════════════════
+// v12.20 — Estado independente da aba "Refugo" (Modo Auditoria com nova
+// cara). Espelha o padrão de State/StateEq, mas sem custo, sem meta, sem
+// turno ND (redistribuído nos 3 turnos reais no momento da agregação).
+const REAL_SHIFT_KEYS = ['First shift', 'Second shift', 'Third shift'];
+const StateAudit = {
+  activeShifts: new Set(REAL_SHIFT_KEYS),
+  globalMetric: 'qty',
+  scope: 'day',
+  drillMat: null,
+  filterFrom: null,
+  filterTo: null,
+  filterMonth: null,
+  filterWeek: null,
+  filterYear: null,
+  filterSearch: '',
+};
+
 const StateEq = {
   activeShifts: new Set(SHIFT_KEYS),
   globalMetric: 'cost',
@@ -5486,19 +5561,6 @@ const AuditMode = {
     return bands[bands.length - 1].outMax; // acima da última faixa: trava no teto dela
   },
 
-  // ── Filtra dados: aplica regra de "produção baixa + refugo alto" ──
-  _filteredScrap() {
-    const { producaoMin, indiceMax } = State.auditMode.config.exclusao;
-    return (State.scrap || []).filter(r => {
-      if (producaoMin > 0 && indiceMax > 0) {
-        const qty = r.quantityProduced || 0;
-        const idx = scrapRate(r.defectQty || 0, qty);
-        if (qty < producaoMin && idx > indiceMax) return false; // exclui outlier
-      }
-      return true;
-    });
-  },
-
   // ── Resolve o nome de exibição de um defeito, aplicando oculto/mesclado ──
   _resolveDefect(desc) {
     const rules = State.auditMode.config.defectRules;
@@ -5509,64 +5571,471 @@ const AuditMode = {
     return desc;
   },
 
-  render() {
-    const data = this._filteredScrap();
-    let qty = 0, def = 0;
-    const byDefect = {};
+  // ═══════════════════════════════
+  // v12.20 — Aba "Refugo": filtros, agregação com ND redistribuído e fator
+  // de escala único, gráficos e drill-down. Tudo independente do Dashboard.
+  // ═══════════════════════════════
 
-    data.forEach(r => {
-      qty += r.quantityProduced || 0;
-      def += r.defectQty || 0;
-      const resolved = this._resolveDefect(r.defectDesc || 'Sem descrição');
-      if (resolved === null) return; // defeito oculto: não entra na quebra por defeito
-      byDefect[resolved] = (byDefect[resolved] || 0) + (r.defectQty || 0);
+  // Contribuição de um registro para os turnos reais (ND divide 1/3 pra cada)
+  _shiftContribs(row) {
+    if (row.shift === 'ND') return REAL_SHIFT_KEYS.map(k => [k, 1/3]);
+    return [[row.shift, 1]];
+  },
+
+  // Filtro de data/busca (código/descrição apenas) — sem sintaxe avançada
+  _auditFiltered(rows) {
+    const rawSearch = (StateAudit.filterSearch || '').trim().toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const { producaoMin, indiceMax } = State.auditMode.config.exclusao;
+    return (rows || []).filter(r => {
+      if (StateAudit.filterFrom && r.date < StateAudit.filterFrom) return false;
+      if (StateAudit.filterTo && r.date > StateAudit.filterTo) return false;
+      if (StateAudit.filterYear && r.year !== StateAudit.filterYear) return false;
+      if (StateAudit.filterMonth) {
+        const k = `${r.year}-${String(r.month).padStart(2,'0')}`;
+        if (k !== StateAudit.filterMonth) return false;
+      }
+      if (StateAudit.filterWeek && r.week !== StateAudit.filterWeek) return false;
+      if (rawSearch) {
+        const code = (r.materialCode || '').toLowerCase();
+        const desc = (r.materialDesc || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (!code.includes(rawSearch) && !desc.includes(rawSearch)) return false;
+      }
+      // v12.20 — regra "produção baixa + refugo alto" (restaurada aqui, aplicada
+      // uma única vez, valendo para agregação/temporal/drill-down igualmente)
+      if (producaoMin > 0 && indiceMax > 0) {
+        const qty = r.quantityProduced || 0;
+        const idx = scrapRate(r.defectQty || 0, qty);
+        if (qty < producaoMin && idx > indiceMax) return false;
+      }
+      return true;
     });
+  },
 
-    const realIdx = scrapRate(def, qty);
+  // Agregação única: totais, por turno, por defeito, por produto — já
+  // respeitando turnos ativos e a divisão do ND
+  _computeAgg(data) {
+    const byShift = {}; REAL_SHIFT_KEYS.forEach(k => byShift[k] = { qty: 0, def: 0 });
+    const byDefect = {};
+    const byProduct = {};
+    let totalQty = 0, totalDef = 0;
+    data.forEach(r => {
+      const contribs = this._shiftContribs(r).filter(([sk]) => StateAudit.activeShifts.has(sk));
+      if (!contribs.length) return;
+      let rowWeight = 0;
+      contribs.forEach(([sk, w]) => {
+        const q = (r.quantityProduced || 0) * w, d = (r.defectQty || 0) * w;
+        byShift[sk].qty += q; byShift[sk].def += d;
+        totalQty += q; totalDef += d;
+        rowWeight += w;
+        if (!byProduct[r.materialCode]) byProduct[r.materialCode] = { code: r.materialCode, desc: r.materialDesc, qty: 0, def: 0 };
+        byProduct[r.materialCode].qty += q; byProduct[r.materialCode].def += d;
+      });
+      if (rowWeight > 0) {
+        const resolved = this._resolveDefect(r.defectDesc || 'Sem descrição');
+        if (resolved !== null) byDefect[resolved] = (byDefect[resolved] || 0) + (r.defectQty || 0) * rowWeight;
+      }
+    });
+    return { totalQty, totalDef, byShift, byDefect, byProduct };
+  },
+
+  // Agregação temporal (por bucket de tempo × turno), mesma lógica de ND
+  _computeTemporal(data) {
+    const S = StateAudit.scope;
+    const buckets = {};
+    data.forEach(r => {
+      let k = '';
+      if (S === 'year') k = String(r.year);
+      else if (S === 'month') k = `${r.year}-${String(r.month).padStart(2,'0')}`;
+      else if (S === 'week') k = r.week;
+      else if (S === 'day') k = r.date;
+      if (!buckets[k]) { buckets[k] = {}; REAL_SHIFT_KEYS.forEach(sk => buckets[k][sk] = { qty: 0, def: 0 }); }
+      this._shiftContribs(r).forEach(([sk, w]) => {
+        if (!StateAudit.activeShifts.has(sk)) return;
+        buckets[k][sk].qty += (r.quantityProduced || 0) * w;
+        buckets[k][sk].def += (r.defectQty || 0) * w;
+      });
+    });
+    return buckets;
+  },
+
+  // Fator de escala único: aplicado a toda quantidade exibida na aba, de
+  // forma que tudo feche conta entre si (mesma lógica da correção v12.18,
+  // generalizada para a página inteira via um único fator multiplicativo).
+  _scaleFactor(totalDef, totalQty) {
+    if (totalDef <= 0) return 1;
+    const realIdx = scrapRate(totalDef, totalQty);
     const shownIdx = this.transformPct(realIdx);
+    const idxFrac = Math.min(shownIdx, 99.999) / 100;
+    const shownDef = idxFrac > 0 ? (idxFrac * totalQty) / (1 - idxFrac) : 0;
+    return shownDef / totalDef;
+  },
 
-    // v12.18 — CORREÇÃO DE CONSISTÊNCIA: antes, "Refugo" mostrava a
-    // quantidade REAL enquanto "Índice" mostrava o valor TRANSFORMADO — os
-    // dois números não batiam entre si (ex: 25 refugo em 100 peças exibia
-    // "5%", quando 25/125=20%). Agora mantemos Produção real fixa e
-    // recalculamos o Refugo exibido de trás pra frente, de forma que
-    // Refugo_exibido / (Produção + Refugo_exibido) = Índice_exibido — os
-    // três números na tela sempre fecham a conta entre si.
-    const idxFrac = Math.min(shownIdx, 99.999) / 100; // trava contra divisão por zero em 100%
-    const shownDef = idxFrac > 0 ? (idxFrac * qty) / (1 - idxFrac) : 0;
+  // ── Filtros: handlers (mesma UX do Dashboard, sem custo/meta/ND) ──
+  _initFilters() {
+    const data = State.scrap || [];
+    const mSet = new Set(), weekSet = new Set(), yearSet = new Set();
+    data.forEach(r => {
+      if (r.year != null) yearSet.add(r.year);
+      if (r.year != null && r.month != null) mSet.add(`${r.year}-${String(r.month).padStart(2,'0')}`);
+      if (r.week) weekSet.add(r.week);
+    });
+    const mn = (I18n.t('months.short') || 'Jan,Fev,Mar,Abr,Mai,Jun,Jul,Ago,Set,Out,Nov,Dez').split(',');
+    const ySel = document.getElementById('audit-f-year-sel');
+    if (ySel) ySel.innerHTML = '<option value="">— Ano —</option>' + [...yearSet].sort().reverse().map(y => `<option value="${y}" ${StateAudit.filterYear===y?'selected':''}>${y}</option>`).join('');
+    const mSel = document.getElementById('audit-f-month-sel');
+    if (mSel) mSel.innerHTML = '<option value="">— Mês —</option>' + [...mSet].sort().reverse().map(m => {
+      const [y, mo] = m.split('-'); return `<option value="${m}" ${StateAudit.filterMonth===m?'selected':''}>${mn[parseInt(mo)-1]}/${y.slice(2)}</option>`;
+    }).join('');
+    const wSel = document.getElementById('audit-f-week-sel');
+    if (wSel) wSel.innerHTML = '<option value="">— Semana —</option>' + [...weekSet].sort().reverse().map(w => `<option value="${w}" ${StateAudit.filterWeek===w?'selected':''}>${w}</option>`).join('');
+    const fFrom = document.getElementById('audit-f-from'); if (fFrom) fFrom.value = StateAudit.filterFrom || '';
+    const fTo = document.getElementById('audit-f-to'); if (fTo) fTo.value = StateAudit.filterTo || '';
+    const scopeSel = document.getElementById('audit-scope-sel'); if (scopeSel) scopeSel.value = StateAudit.scope;
+    const searchEl = document.getElementById('audit-f-search'); if (searchEl) searchEl.value = StateAudit.filterSearch || '';
+
+    // Toggles de turno (T1/T2/T3, sem ND, clique simples sem isolamento)
+    const shiftHost = document.getElementById('audit-shift-toggles');
+    if (shiftHost && !shiftHost.dataset.built) {
+      shiftHost.innerHTML = REAL_SHIFT_KEYS.map(k => {
+        const m = SHIFTS[k];
+        return `<button class="stbtn ${m.cls}" title="${k}" onclick="AuditMode.toggleShift('${k}')">${m.lbl}</button>`;
+      }).join('');
+      shiftHost.dataset.built = '1';
+    }
+    if (shiftHost) {
+      shiftHost.querySelectorAll('.stbtn').forEach(btn => {
+        const k = btn.title, active = StateAudit.activeShifts.has(k);
+        const m = SHIFTS[k];
+        if (active) { btn.className = 'stbtn ' + m.cls; btn.style = ''; }
+        else { btn.className = 'stbtn'; btn.style.borderColor = 'var(--border2)'; btn.style.background = 'var(--surface)'; btn.style.color = 'var(--text-muted)'; }
+      });
+    }
+    document.getElementById('audit-gm-qty')?.classList.toggle('active', StateAudit.globalMetric === 'qty');
+    document.getElementById('audit-gm-pct')?.classList.toggle('active', StateAudit.globalMetric === 'pct');
+  },
+
+  copyFromToTo() {
+    const from = document.getElementById('audit-f-from').value;
+    if (!from) return;
+    document.getElementById('audit-f-to').value = from;
+    this.onDateChange();
+  },
+  onDateChange() {
+    StateAudit.filterFrom = document.getElementById('audit-f-from').value || null;
+    StateAudit.filterTo = document.getElementById('audit-f-to').value || null;
+    StateAudit.filterMonth = null; StateAudit.filterWeek = null; StateAudit.filterYear = null;
+    this.render();
+  },
+  onYearChange() {
+    const v = document.getElementById('audit-f-year-sel').value;
+    StateAudit.filterYear = v ? parseInt(v) : null;
+    StateAudit.filterMonth = null; StateAudit.filterWeek = null; StateAudit.filterFrom = null; StateAudit.filterTo = null;
+    if (v) { StateAudit.scope = 'month'; }
+    this.render();
+  },
+  onMonthWeekChange(type) {
+    if (type === 'month') {
+      const v = document.getElementById('audit-f-month-sel').value;
+      StateAudit.filterMonth = v || null; StateAudit.filterWeek = null; StateAudit.filterYear = null;
+      if (v) StateAudit.scope = 'week';
+    } else {
+      const v = document.getElementById('audit-f-week-sel').value;
+      StateAudit.filterWeek = v || null; StateAudit.filterMonth = null; StateAudit.filterYear = null;
+      if (v) StateAudit.scope = 'day';
+    }
+    StateAudit.filterFrom = null; StateAudit.filterTo = null;
+    this.render();
+  },
+  onScopeChange() {
+    StateAudit.scope = document.getElementById('audit-scope-sel').value;
+    this.render();
+  },
+  onSearchChange() {
+    StateAudit.filterSearch = document.getElementById('audit-f-search').value || '';
+    this.render();
+  },
+  setGlobalMetric(m) {
+    StateAudit.globalMetric = m;
+    document.getElementById('audit-gm-qty')?.classList.toggle('active', m === 'qty');
+    document.getElementById('audit-gm-pct')?.classList.toggle('active', m === 'pct');
+    this.render();
+  },
+  toggleShift(key) {
+    if (StateAudit.activeShifts.has(key)) {
+      if (StateAudit.activeShifts.size === 1) { UI.toast('Pelo menos um turno deve estar ativo', 'warn'); return; }
+      StateAudit.activeShifts.delete(key);
+    } else {
+      StateAudit.activeShifts.add(key);
+    }
+    this.render();
+  },
+  clearFilters() {
+    StateAudit.filterFrom = null; StateAudit.filterTo = null;
+    StateAudit.filterYear = null; StateAudit.filterMonth = null; StateAudit.filterWeek = null;
+    StateAudit.filterSearch = '';
+    StateAudit.scope = 'day';
+    StateAudit.activeShifts = new Set(REAL_SHIFT_KEYS);
+    document.getElementById('audit-shift-toggles').dataset.built = '';
+    this.render();
+  },
+
+  // ── Orquestrador principal ──
+  render() {
+    this._initFilters();
+    const raw = this._auditFiltered(State.scrap || []);
+    const agg = this._computeAgg(raw);
+    const factor = this._scaleFactor(agg.totalDef, agg.totalQty);
+    this._lastFactor = factor; // reutilizado pelo drill-down
+
+    const realIdx = scrapRate(agg.totalDef, agg.totalQty);
+    const shownIdx = this.transformPct(realIdx);
+    const shownDef = agg.totalDef * factor;
 
     const elIdx = document.getElementById('audit-k-idx');
     const elQty = document.getElementById('audit-k-scrap');
     const elProd = document.getElementById('audit-k-prod');
-    if (elIdx)  elIdx.textContent  = shownIdx.toFixed(2) + '%';
-    if (elQty)  elQty.textContent  = Math.round(shownDef).toLocaleString('pt-BR');
-    if (elProd) elProd.textContent = qty.toLocaleString('pt-BR');
+    if (elIdx) elIdx.textContent = shownIdx.toFixed(2) + '%';
+    if (elQty) elQty.textContent = Math.round(shownDef).toLocaleString('pt-BR');
+    if (elProd) elProd.textContent = Math.round(agg.totalQty).toLocaleString('pt-BR');
 
-    // Pareto de defeitos — cada barra também passa pela transformação de faixas
-    const entries = Object.entries(byDefect).sort((a,b) => b[1] - a[1]).slice(0, 10);
-    const labels = entries.map(([k]) => k.length > 28 ? k.slice(0,26)+'…' : k);
-    const values = entries.map(([,v]) => {
-      const pctReal = qty > 0 ? scrapRate(v, qty - v) : 0; // participação daquele defeito na produção total
-      return this.transformPct(pctReal);
+    this._renderTemporal(raw, factor);
+    this._renderShiftDist(agg, factor);
+    this._renderProductPareto(agg, factor);
+    this._renderDefectPareto(agg, factor);
+
+    if (StateAudit.drillMat) this._refreshDrill(raw, factor);
+  },
+
+  _renderTemporal(raw, factor) {
+    const buckets = this._computeTemporal(raw);
+    const rawKeys = Object.keys(buckets).sort();
+    const S = StateAudit.scope;
+    const mn = (I18n.t('months.short') || 'Jan,Fev,Mar,Abr,Mai,Jun,Jul,Ago,Set,Out,Nov,Dez').split(',');
+    const labels = rawKeys.map(k => {
+      if (S === 'month' && k.includes('-')) { const [y,m] = k.split('-'); return `${mn[parseInt(m)-1]}/${y.slice(2)}`; }
+      if (S === 'day' && k.includes('-')) { const [y,m,d] = k.split('-'); return `${d}/${m}`; }
+      return k;
     });
-
-    const canvas = document.getElementById('chart-audit-pareto');
-    if (canvas) {
-      if (this._charts['pareto']) this._charts['pareto'].destroy();
-      const th = getChartThemeColors();
-      this._charts['pareto'] = new Chart(canvas, {
-        type: 'bar',
-        data: { labels, datasets: [{ label: 'Índice (%) — escala ajustada', data: values, backgroundColor:'rgba(239,68,68,.65)', borderColor:'#ef4444', borderWidth:1, borderRadius:3 }] },
-        options: {
-          responsive:true, maintainAspectRatio:false,
-          plugins: { legend: { display:false } },
-          scales: {
-            x: { ticks:{ color:th.text, font:{size:9}, maxRotation:45, minRotation:30 }, grid:{display:false} },
-            y: { beginAtZero:true, grace:'12%', ticks:{ color:th.text, callback:v=>v.toFixed(1)+'%' }, grid:{ color:th.grid } }
-          }
-        }
+    const activeKeys = REAL_SHIFT_KEYS.filter(s => StateAudit.activeShifts.has(s));
+    const M = StateAudit.globalMetric;
+    const datasets = activeKeys.map((s, idx) => {
+      const meta = SHIFTS[s];
+      return {
+        label: meta.lbl,
+        data: rawKeys.map(k => {
+          const b = buckets[k]?.[s];
+          if (!b) return 0;
+          if (M === 'qty') return b.def * factor;
+          return 0; // pct preenchido abaixo
+        }),
+        backgroundColor: meta.rgba, borderColor: meta.color, borderWidth: 1, borderRadius: 3, stack: 'main', order: 2
+      };
+    });
+    if (M === 'pct') {
+      datasets.forEach((ds, idx) => {
+        ds.data = rawKeys.map(k => {
+          let td = 0, tq = 0;
+          activeKeys.forEach(s => { td += (buckets[k]?.[s]?.def || 0); tq += (buckets[k]?.[s]?.qty || 0); });
+          const real = scrapRate(td, tq);
+          return this.transformPct(real);
+        });
+        if (idx > 0) ds.data = rawKeys.map(() => 0);
       });
     }
+    const yLbl = M === 'pct' ? 'Índice (%)' : 'Qtd Refugada (pç)';
+    this.makeAuditChart('chart-audit-temporal', {
+      type: 'bar',
+      data: { labels, datasets },
+      options: {
+        ...CHART_DEFAULTS,
+        scales: {
+          x: { ...CHART_DEFAULTS.scales.x, stacked: true },
+          y: { ...CHART_DEFAULTS.scales.y, stacked: true, title: { display:true, text:yLbl, color:'#5d6882', font:{size:10} },
+               ticks: { color:'#5d6882', callback: v => M==='pct' ? v.toFixed(1)+'%' : v.toLocaleString('pt-BR') } }
+        }
+      }
+    });
+  },
+
+  _renderShiftDist(agg, factor) {
+    const M = StateAudit.globalMetric;
+    const activeKeys = REAL_SHIFT_KEYS.filter(s => StateAudit.activeShifts.has(s));
+    const labels = activeKeys.map(s => SHIFTS[s].lbl);
+    const colors = activeKeys.map(s => SHIFTS[s].rgba);
+    const bcolors = activeKeys.map(s => SHIFTS[s].color);
+    const totalDef = activeKeys.reduce((s,k) => s + agg.byShift[k].def, 0);
+    const vals = activeKeys.map(s => {
+      const d = agg.byShift[s].def;
+      return M === 'pct' ? (totalDef > 0 ? (d/totalDef)*100 : 0) : d * factor;
+    });
+    this.makeAuditChart('chart-audit-shiftdist', {
+      type: 'bar',
+      data: { labels, datasets: [{ label: M==='pct'?'%':'Qtd', data: vals, backgroundColor: colors, borderColor: bcolors, borderWidth: 2, borderRadius: 5 }] },
+      options: {
+        ...CHART_DEFAULTS,
+        plugins: { legend: { display:false } },
+        scales: {
+          x: { ticks:{ color:'#5d6882', font:{size:11} }, grid:{display:false} },
+          y: { beginAtZero:true, grace:'12%', ticks:{ color:'#5d6882', callback: v => M==='pct' ? v.toFixed(1)+'%' : v.toLocaleString('pt-BR') }, grid:{ color:'#1f2437' } }
+        }
+      }
+    });
+  },
+
+  _renderProductPareto(agg, factor) {
+    const M = StateAudit.globalMetric;
+    const N = parseInt(document.getElementById('audit-top-n')?.value) || 10;
+    const arr = Object.values(agg.byProduct).filter(x => x.def > 0);
+    arr.forEach(x => { x.realVal = M === 'pct' ? scrapRate(x.def, x.qty) : x.def; });
+    arr.sort((a,b) => b.realVal - a.realVal);
+    const sorted = arr.slice(0, N);
+    const labels = sorted.map(x => x.code);
+    const descMap = {}; sorted.forEach(x => descMap[x.code] = x.desc);
+    const barData = sorted.map(x => M === 'pct' ? this.transformPct(x.realVal) : x.def * factor);
+
+    const chart = this.makeAuditChart('chart-audit-product-pareto', {
+      type: 'bar',
+      data: { labels, datasets: [{ label: M==='pct'?'Índice %':'Qtd pç', data: barData, backgroundColor:'rgba(79,124,255,0.7)', borderColor:'#4f7cff', borderWidth:1.5, borderRadius:4 }] },
+      options: {
+        ...CHART_DEFAULTS,
+        onClick: (evt, els) => { if (!els.length) return; const i = els[0].index; this._drillDown(sorted[i].code, sorted[i].desc); },
+        plugins: { ...CHART_DEFAULTS.plugins, tooltip: { callbacks: {
+          title: ctx => { const code = ctx[0].label; const d = descMap[code]||''; return d ? `${code} — ${d}` : code; },
+          label: ctx => M==='pct' ? `Índice: ${ctx.raw.toFixed(2)}%` : `Qtd: ${ctx.raw.toLocaleString('pt-BR')} pç`
+        }}},
+        scales: {
+          x: { ...CHART_DEFAULTS.scales.x, ticks:{ color:'#5d6882', font:{size:10}, maxRotation:40 } },
+          y: { ...CHART_DEFAULTS.scales.y, ticks:{ callback: v => M==='pct'?v.toFixed(1)+'%':v.toLocaleString('pt-BR'), color:'#5d6882' } }
+        }
+      }
+    });
+    if (chart && chart.canvas) chart.canvas.style.cursor = 'pointer';
+  },
+
+  _renderDefectPareto(agg, factor) {
+    const entries = Object.entries(agg.byDefect).sort((a,b) => b[1]-a[1]).slice(0, 10);
+    const labels = entries.map(([k]) => k.length > 30 ? k.slice(0,30)+'…' : k);
+    const vals = entries.map(([,v]) => v * factor);
+    this.makeAuditChart('chart-audit-pareto', {
+      type: 'bar',
+      data: { labels, datasets: [{ data: vals, backgroundColor:'rgba(255,94,94,.65)', borderColor:'#ff5e5e', borderWidth:1.5, borderRadius:4 }] },
+      options: {
+        ...CHART_DEFAULTS,
+        indexAxis: 'y',
+        plugins: { legend: { display:false } },
+        scales: {
+          x: { beginAtZero:true, grace:'12%', ticks:{ color:'#5d6882', font:{size:10} }, grid:{ color:'#1f2437' } },
+          y: { ticks:{ color:'#e8eaf2', font:{size:11} }, grid:{ display:false } }
+        }
+      }
+    });
+  },
+
+  // ── Drill-down de produto: histórico + defeitos do item (sem ocorrências) ──
+  _drillDown(mat, desc) {
+    StateAudit.drillMat = mat;
+    if (!desc) { const r = (State.scrap||[]).find(r => r.materialCode===mat); desc = r ? r.materialDesc : mat; }
+    const el = document.getElementById('audit-drilldown');
+    el.innerHTML = `
+      <div class="drill-header">
+        <div class="drill-code">${mat}</div>
+        <div class="drill-desc">${(desc||'').substring(0,60)}</div>
+        <button onclick="AuditMode.closeDrill()" style="padding:4px 10px;background:var(--surface3);border:1px solid var(--border2);border-radius:5px;color:var(--text-muted);font-size:11px;cursor:pointer">Fechar</button>
+      </div>
+      <div class="chart-grid-2">
+        <div class="chart-card">
+          <div class="chart-title">Histórico de Refugo do Item <span class="pill">Qtd pç</span></div>
+          <div class="chart-h250"><canvas id="chart-audit-drill-hist"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Principais Defeitos</div>
+          <div class="chart-h250"><canvas id="chart-audit-drill-def"></canvas></div>
+        </div>
+      </div>
+    `;
+    const raw = this._auditFiltered(State.scrap || []);
+    this._refreshDrill(raw, this._lastFactor || 1);
+    setTimeout(() => { document.getElementById('audit-drilldown')?.scrollIntoView({ behavior:'smooth', block:'start' }); }, 80);
+  },
+
+  closeDrill() {
+    StateAudit.drillMat = null;
+    document.getElementById('audit-drilldown').innerHTML = '';
+  },
+
+  _refreshDrill(raw, factor) {
+    const mat = StateAudit.drillMat;
+    if (!mat) return;
+    const matData = raw.filter(r => r.materialCode === mat);
+    const S = StateAudit.scope;
+    const buckets = {};
+    matData.forEach(r => {
+      let k = '';
+      if (S==='year') k = String(r.year);
+      else if (S==='month') k = `${r.year}-${String(r.month).padStart(2,'0')}`;
+      else if (S==='week') k = r.week;
+      else if (S==='day') k = r.date;
+      if (!buckets[k]) { buckets[k] = {}; REAL_SHIFT_KEYS.forEach(sk => buckets[k][sk] = { def:0 }); }
+      this._shiftContribs(r).forEach(([sk,w]) => {
+        if (!StateAudit.activeShifts.has(sk)) return;
+        buckets[k][sk].def += (r.defectQty||0)*w;
+      });
+    });
+    const rawKeys = Object.keys(buckets).sort();
+    const mn = (I18n.t('months.short') || 'Jan,Fev,Mar,Abr,Mai,Jun,Jul,Ago,Set,Out,Nov,Dez').split(',');
+    const labels = rawKeys.map(k => {
+      if (S==='month' && k.includes('-')) { const [y,m]=k.split('-'); return `${mn[parseInt(m)-1]}/${y.slice(2)}`; }
+      if (S==='day' && k.includes('-')) { const [y,m,d]=k.split('-'); return `${d}/${m}`; }
+      return k;
+    });
+    const activeKeys = REAL_SHIFT_KEYS.filter(s => StateAudit.activeShifts.has(s));
+    const datasets = activeKeys.map(s => {
+      const meta = SHIFTS[s];
+      return { label: meta.lbl, data: rawKeys.map(k => (buckets[k]?.[s]?.def||0)*factor), backgroundColor: meta.rgba, borderColor: meta.color, borderWidth:1, borderRadius:3, stack:'main' };
+    });
+    this.makeAuditChart('chart-audit-drill-hist', {
+      type:'bar', data:{ labels, datasets },
+      options: { ...CHART_DEFAULTS, scales: {
+        x:{ stacked:true, grid:{display:false}, ticks:{color:'#5d6882',font:{size:10}} },
+        y:{ stacked:true, beginAtZero:true, grace:'12%', ticks:{color:'#5d6882',font:{size:10},callback:v=>v.toLocaleString('pt-BR')}, grid:{color:'#1f2437'}, title:{display:true,text:'Qtd Refugada (pç)',color:'#5d6882',font:{size:11}} }
+      }}
+    });
+
+    const byDef = {};
+    matData.forEach(r => {
+      const contribs = this._shiftContribs(r).filter(([sk]) => StateAudit.activeShifts.has(sk));
+      const w = contribs.reduce((s,[,ww])=>s+ww,0);
+      if (w <= 0 || !r.defectDesc || !r.defectQty) return;
+      const resolved = this._resolveDefect(r.defectDesc);
+      if (resolved === null) return;
+      byDef[resolved] = (byDef[resolved]||0) + r.defectQty*w;
+    });
+    const sortedDef = Object.entries(byDef).sort((a,b)=>b[1]-a[1]).slice(0,8);
+    this.makeAuditChart('chart-audit-drill-def', {
+      type:'bar',
+      data: { labels: sortedDef.map(([k])=>k.length>30?k.slice(0,30)+'…':k), datasets:[{ data: sortedDef.map(([,v])=>v*factor), backgroundColor:'rgba(255,94,94,.65)', borderColor:'#ff5e5e', borderWidth:1.5, borderRadius:4 }] },
+      options: { ...CHART_DEFAULTS, indexAxis:'y', plugins:{legend:{display:false}}, scales: {
+        x:{ beginAtZero:true, grace:'12%', ticks:{color:'#5d6882',font:{size:10}}, grid:{color:'#1f2437'} },
+        y:{ ticks:{color:'#e8eaf2',font:{size:11}}, grid:{display:false} }
+      }}
+    });
+  },
+
+  makeAuditChart(id, config) {
+    const canvas = document.getElementById(id);
+    if (!canvas) return null;
+    if (this._charts[id]) this._charts[id].destroy();
+    const th = getChartThemeColors();
+    if (config.options?.scales) {
+      Object.values(config.options.scales).forEach(scale => {
+        if (scale.grid && scale.grid.color !== undefined) scale.grid.color = th.grid;
+        if (scale.ticks) scale.ticks.color = th.text;
+        if (scale.title && scale.title.display) scale.title.color = th.text;
+      });
+    }
+    this._charts[id] = new Chart(canvas, config);
+    return this._charts[id];
   },
 
   // ── Painel de configuração (dentro de Configurações) ──
