@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.16 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.17 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.16</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.17</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -211,6 +211,7 @@ main{flex:1;display:flex;flex-direction:column}
       <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       <span id="logout-email" style="font-size:10px"></span>
     </button>
+    <button id="audit-icon" onclick="AuditMode.toggle(false)" title="Sair do Modo Auditoria" style="display:none;padding:5px 9px;background:rgba(176,108,255,.12);border:1px solid rgba(176,108,255,.4);border-radius:6px;color:var(--purple);font-size:14px;cursor:pointer;line-height:1;align-items:center">🕵️‍♂️</button>
     <button id="theme-toggle" onclick="UI.toggleThemeOrAdmin(event)" title="Alternar Tema (Shift+Clique para mostrar/ocultar abas admin)" style="padding:5px 9px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text-muted);font-size:14px;cursor:pointer;line-height:1;display:flex;align-items:center">🌙</button>
   </div>
 </header>
@@ -222,6 +223,7 @@ main{flex:1;display:flex;flex-direction:column}
   <button class="tab-btn" data-tab="pdm" onclick="UI.switchTab('pdm')" data-i18n="tab.pdm">Resumo PDM</button>
   <button class="tab-btn admin-tab" data-tab="import" onclick="UI.switchTab('import')" style="display:none" data-i18n="tab.import">Importar Dados</button>
   <button class="tab-btn admin-tab" data-tab="config" onclick="UI.switchTab('config')" style="display:none" data-i18n="tab.config">Configurações</button>
+  <button class="tab-btn audit-tab" data-tab="audit" onclick="UI.switchTab('audit')" style="display:none" data-i18n="tab.audit">Modo Auditoria</button>
 </div>
 
 <main>
@@ -700,8 +702,36 @@ create policy "scrapiq_all" on scrapiq_store
         <span id="theme-label-config" style="font-size:12px;color:var(--text-muted);font-family:'DM Mono',monospace">Tema atual: Escuro</span>
       </div>
     </div>
+
+    <div class="card" style="margin-bottom:18px;margin-top:18px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <div style="width:30px;height:30px;border-radius:7px;background:rgba(176,108,255,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:15px">🕵️‍♂️</div>
+        <div>
+          <div class="ff" style="font-weight:700;font-size:13px">Modo Auditoria</div>
+          <div style="font-size:11px;color:var(--text-muted)">Visão simplificada e curada — esconde as demais abas, aplica exclusões e comprime a escala do índice exibido.</div>
+        </div>
+      </div>
+      <button onclick="AuditMode.toggle(true)" style="padding:9px 20px;background:rgba(176,108,255,.12);border:1px solid rgba(176,108,255,.4);border-radius:7px;color:var(--purple);font-size:12px;font-weight:600;cursor:pointer;margin-bottom:16px">Ativar Modo Auditoria</button>
+      <div id="audit-config-panel"></div>
+    </div>
   </div>
-</div></main>
+</div>
+
+<div id="view-audit" class="tab-view">
+  <div style="background:rgba(176,108,255,.08);border:1px solid rgba(176,108,255,.3);border-radius:8px;padding:10px 16px;margin-bottom:16px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--purple)">
+    🕵️‍♂️ <span data-i18n="audit.banner">Modo Auditoria — visão simplificada e curada dos dados de refugo.</span>
+  </div>
+  <div class="kpi-grid" style="margin-bottom:20px">
+    <div class="kpi c1"><div class="kpi-lbl">Peças Boas</div><div class="kpi-val" id="audit-k-prod">—</div></div>
+    <div class="kpi c2"><div class="kpi-lbl">Refugo</div><div class="kpi-val" id="audit-k-scrap">—</div></div>
+    <div class="kpi c3"><div class="kpi-lbl">Índice de Refugo</div><div class="kpi-val" id="audit-k-idx">—</div></div>
+  </div>
+  <div class="chart-card chart-grid-full">
+    <div class="chart-title"><span>Principais Defeitos</span></div>
+    <div class="chart-h300"><canvas id="chart-audit-pareto"></canvas></div>
+  </div>
+</div>
+</main>
 </div><script>
 'use strict';
 
@@ -977,6 +1007,7 @@ const Supa = {
     if (store === 'scrap')   return String(item.id);
     if (store === 'aliases') return String(item.code);
     if (store === 'goals')   return 'global';   // v11.9: meta única compartilhada
+    if (store === 'audit_config') return 'global'; // v12.17: config única compartilhada do Modo Auditoria
     if (store === 'stopcodes') return String(item.code); // v12.0: catálogo de motivos de parada
     if (store === 'registros') return this._hash(`${item.data}|${item.turno}|${item.codigo}`); // v12.0
     // ocorrencias: mesma chave composta usada no dedup local
@@ -1143,7 +1174,7 @@ const DataService = {
     return new Promise((res, rej) => {
       if (this._db) return res(this._db);
       // Nome Banco de Dados
-      const req = indexedDB.open('ScrapIQ_v3', 6);
+      const req = indexedDB.open('ScrapIQ_v3', 7);
       req.onupgradeneeded = e => {
         const db = e.target.result;
         if (!db.objectStoreNames.contains('costs'))
@@ -1159,6 +1190,10 @@ const DataService = {
           db.createObjectStore('registros', { keyPath:'id', autoIncrement:true });
         if (!db.objectStoreNames.contains('stopcodes'))
           db.createObjectStore('stopcodes', { keyPath:'code' });
+        // v12.17 — Modo Auditoria: configuração única compartilhada (faixas,
+        // regras de defeito, limiar de exclusão)
+        if (!db.objectStoreNames.contains('audit_config'))
+          db.createObjectStore('audit_config', { keyPath:'key' });
       };
       req.onsuccess = e => { this._db = e.target.result; res(this._db); };
       req.onerror = e => { dbgErr('Erro IndexedDB:', e.target.error); rej(e.target.error); };
@@ -1459,6 +1494,21 @@ const State = {
   filterYear: null,
   filterSearch: '',
   goals: { qty: null, cost: null, pct: null },
+  // v12.17 — Modo Auditoria: visão curada/simplificada, isolada dos demais
+  // cálculos e telas. Configuração compartilhada via store 'audit_config'.
+  auditMode: {
+    active: false,
+    config: {
+      bands: [
+        { inMin: 0,  inMax: 2,   outMin: 0,   outMax: 1 },
+        { inMin: 2,  inMax: 10,  outMin: 0.5, outMax: 2 },
+        { inMin: 10, inMax: 30,  outMin: 2,   outMax: 4 },
+        { inMin: 30, inMax: 100, outMin: 4,   outMax: 5 }
+      ],
+      defectRules: {},               // { "Nome do Defeito": {state:'visible'|'hidden'|'merged', target:'Outro Defeito'} }
+      exclusao: { producaoMin: 0, indiceMax: 0 } // 0 = regra desativada
+    }
+  },
 };
 
 // ═══════════════════════════════
@@ -3073,6 +3123,8 @@ const UI = {
     if (tab === 'import') { this.renderDBSummary(); this.renderClearWindows(); }
     if (tab === 'pdm')    { PDM.init(); }
     if (tab === 'strat')  { Strat.render(); }
+    if (tab === 'config') { AuditMode.renderConfigPanel(); }
+    if (tab === 'audit')  { AuditMode.render(); }
     if (tab === 'dash')   { Dashboard.renderKPIs(filtered(State.scrap)); Dashboard.render(); }
     if (tab === 'dasheq') {
       if (!DashEq._initialized) { DashEq._initialized = true; DashEq.init(); }
@@ -4850,7 +4902,7 @@ const I18n = {
   _lang: 'pt',
   _dict: {
     pt: {
-      'tab.dashboard':'Dashboard','tab.dasheq':'Por Equipamento','tab.pdm':'Resumo PDM','tab.import':'Importar Dados','tab.config':'Configurações',
+      'tab.dashboard':'Dashboard','tab.dasheq':'Por Equipamento','tab.pdm':'Resumo PDM','tab.import':'Importar Dados','tab.config':'Configurações','tab.audit':'Modo Auditoria',
       'filter.periodo':'Período','filter.agrupar':'Agrupar por','filter.metrica':'Métrica','filter.turnos':'Turnos','filter.limpar':'✕ Limpar Filtros',
       'scope.year':'Anual','scope.month':'Mensal','scope.week':'Semanal','scope.day':'Diário',
       'metric.cost':'Custo R$','metric.qty':'Qtd','metric.pct':'Índice %',
@@ -4925,7 +4977,7 @@ const I18n = {
       'header.analyser':'Analyser'
     },
     en: {
-      'tab.dashboard':'Dashboard','tab.dasheq':'By Equipment','tab.pdm':'PDM Summary','tab.import':'Import Data','tab.config':'Settings',
+      'tab.dashboard':'Dashboard','tab.dasheq':'By Equipment','tab.pdm':'PDM Summary','tab.import':'Import Data','tab.config':'Settings','tab.audit':'Audit Mode',
       'filter.periodo':'Period','filter.agrupar':'Group by','filter.metrica':'Metric','filter.turnos':'Shifts','filter.limpar':'✕ Clear Filters',
       'scope.year':'Yearly','scope.month':'Monthly','scope.week':'Weekly','scope.day':'Daily',
       'metric.cost':'Cost $','metric.qty':'Qty','metric.pct':'Index %',
@@ -5000,7 +5052,7 @@ const I18n = {
       'header.analyser':'Analyser'
     },
     es: {
-      'tab.dashboard':'Dashboard','tab.dasheq':'Por Equipo','tab.pdm':'Resumen PDM','tab.import':'Importar Datos','tab.config':'Configuración',
+      'tab.dashboard':'Dashboard','tab.dasheq':'Por Equipo','tab.pdm':'Resumen PDM','tab.import':'Importar Datos','tab.config':'Configuración','tab.audit':'Modo Auditoría',
       'filter.periodo':'Período','filter.agrupar':'Agrupar por','filter.metrica':'Métrica','filter.turnos':'Turnos','filter.limpar':'✕ Limpiar Filtros',
       'scope.year':'Anual','scope.month':'Mensual','scope.week':'Semanal','scope.day':'Diario',
       'metric.cost':'Costo $','metric.qty':'Cant.','metric.pct':'Índice %',
@@ -5325,6 +5377,245 @@ const Strat = {
         <span style="background:rgba(255,94,94,.38);padding:2px 8px;border-radius:3px">&ge; 6%</span>
       </div>`;
   }
+};
+
+// ═══════════════════════════════
+// AUDIT MODE — v12.17
+// Módulo TOTALMENTE ISOLADO: lê os mesmos dados brutos (State.scrap), mas
+// tem seu próprio cálculo, filtro e renderização. NÃO chama nem depende de
+// nenhuma função do Dashboard/DashEq/PDM — mudanças aqui não têm como
+// afetar os cálculos/telas existentes, e vice-versa.
+//
+// ATENÇÃO — natureza da proteção: isso é curadoria de apresentação, não uma
+// barreira de segurança real. O navegador continua com State.scrap inteiro
+// em memória; qualquer pessoa com DevTools consegue inspecionar o dado bruto
+// independente de qual aba está visível. Combinado com o usuário: aceitável
+// para esse uso (não é dado sigiloso de alto risco).
+// ═══════════════════════════════
+const AuditMode = {
+  _charts: {},
+
+  // ── Configuração: carregar / salvar (compartilhada via store 'audit_config') ──
+  async loadConfig() {
+    try {
+      const rows = Supa.active ? await Supa.getAll('audit_config') : await DataService.getAll('audit_config');
+      if (rows && rows.length) {
+        const cfg = rows[0];
+        if (cfg.bands) State.auditMode.config.bands = cfg.bands;
+        if (cfg.defectRules) State.auditMode.config.defectRules = cfg.defectRules;
+        if (cfg.exclusao) State.auditMode.config.exclusao = cfg.exclusao;
+      }
+    } catch(e) { dbgWarn('AuditMode.loadConfig:', e); }
+  },
+
+  async saveConfig() {
+    const doc = { key: 'global', ...State.auditMode.config };
+    try {
+      if (Supa.active) {
+        await Supa.putMany('audit_config', [doc]);
+      } else {
+        if (!DataService._db) await DataService.open();
+        await new Promise((res, rej) => {
+          const tx = DataService._db.transaction('audit_config', 'readwrite');
+          tx.objectStore('audit_config').put(doc);
+          tx.oncomplete = res; tx.onerror = rej;
+        });
+      }
+      UI.toast('Configuração do Modo Auditoria salva' + (Supa.active ? ' na nuvem' : ''), 'ok');
+    } catch(e) {
+      dbgErr('AuditMode.saveConfig:', e);
+      UI.toast('Erro ao salvar configuração: ' + e.message, 'err');
+    }
+  },
+
+  // ── Ativar / Desativar ──
+  toggle(forceState) {
+    const active = forceState !== undefined ? forceState : !State.auditMode.active;
+    State.auditMode.active = active;
+    try { localStorage.setItem('scrapiq-audit-active', active ? '1' : '0'); } catch(e) {}
+
+    const normalTabs = document.querySelectorAll('.tab-btn:not(.audit-tab)');
+    const auditTab = document.querySelector('.audit-tab');
+    const icon = document.getElementById('audit-icon');
+
+    normalTabs.forEach(t => { t.style.display = active ? 'none' : ''; });
+    if (auditTab) auditTab.style.display = active ? '' : 'none';
+    if (icon) icon.style.display = active ? 'flex' : 'none';
+
+    if (active) {
+      UI.switchTab('audit');
+      this.render();
+    } else {
+      UI.switchTab('dash');
+    }
+  },
+
+  // ── Transformação por faixas (compressão proporcional, não corte seco) ──
+  transformPct(real) {
+    const bands = State.auditMode.config.bands;
+    if (!bands || !bands.length) return real;
+    if (real <= bands[0].inMin) return bands[0].outMin;
+    for (const b of bands) {
+      if (real >= b.inMin && real <= b.inMax) {
+        const span = b.inMax - b.inMin;
+        const frac = span > 0 ? (real - b.inMin) / span : 0;
+        return b.outMin + frac * (b.outMax - b.outMin);
+      }
+    }
+    return bands[bands.length - 1].outMax; // acima da última faixa: trava no teto dela
+  },
+
+  // ── Filtra dados: aplica regra de "produção baixa + refugo alto" ──
+  _filteredScrap() {
+    const { producaoMin, indiceMax } = State.auditMode.config.exclusao;
+    return (State.scrap || []).filter(r => {
+      if (producaoMin > 0 && indiceMax > 0) {
+        const qty = r.quantityProduced || 0;
+        const idx = scrapRate(r.defectQty || 0, qty);
+        if (qty < producaoMin && idx > indiceMax) return false; // exclui outlier
+      }
+      return true;
+    });
+  },
+
+  // ── Resolve o nome de exibição de um defeito, aplicando oculto/mesclado ──
+  _resolveDefect(desc) {
+    const rules = State.auditMode.config.defectRules;
+    const rule = rules[desc];
+    if (!rule || rule.state === 'visible') return desc;
+    if (rule.state === 'hidden') return null;
+    if (rule.state === 'merged') return rule.target || desc;
+    return desc;
+  },
+
+  render() {
+    const data = this._filteredScrap();
+    let qty = 0, def = 0;
+    const byDefect = {};
+
+    data.forEach(r => {
+      qty += r.quantityProduced || 0;
+      def += r.defectQty || 0;
+      const resolved = this._resolveDefect(r.defectDesc || 'Sem descrição');
+      if (resolved === null) return; // defeito oculto: não entra na quebra por defeito
+      byDefect[resolved] = (byDefect[resolved] || 0) + (r.defectQty || 0);
+    });
+
+    const realIdx = scrapRate(def, qty);
+    const shownIdx = this.transformPct(realIdx);
+
+    const elIdx = document.getElementById('audit-k-idx');
+    const elQty = document.getElementById('audit-k-scrap');
+    const elProd = document.getElementById('audit-k-prod');
+    if (elIdx)  elIdx.textContent  = shownIdx.toFixed(2) + '%';
+    if (elQty)  elQty.textContent  = def.toLocaleString('pt-BR');
+    if (elProd) elProd.textContent = qty.toLocaleString('pt-BR');
+
+    // Pareto de defeitos — cada barra também passa pela transformação de faixas
+    const entries = Object.entries(byDefect).sort((a,b) => b[1] - a[1]).slice(0, 10);
+    const labels = entries.map(([k]) => k.length > 28 ? k.slice(0,26)+'…' : k);
+    const values = entries.map(([,v]) => {
+      const pctReal = qty > 0 ? scrapRate(v, qty - v) : 0; // participação daquele defeito na produção total
+      return this.transformPct(pctReal);
+    });
+
+    const canvas = document.getElementById('chart-audit-pareto');
+    if (canvas) {
+      if (this._charts['pareto']) this._charts['pareto'].destroy();
+      const th = getChartThemeColors();
+      this._charts['pareto'] = new Chart(canvas, {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Índice (%) — escala ajustada', data: values, backgroundColor:'rgba(239,68,68,.65)', borderColor:'#ef4444', borderWidth:1, borderRadius:3 }] },
+        options: {
+          responsive:true, maintainAspectRatio:false,
+          plugins: { legend: { display:false } },
+          scales: {
+            x: { ticks:{ color:th.text, font:{size:9}, maxRotation:45, minRotation:30 }, grid:{display:false} },
+            y: { beginAtZero:true, grace:'12%', ticks:{ color:th.text, callback:v=>v.toFixed(1)+'%' }, grid:{ color:th.grid } }
+          }
+        }
+      });
+    }
+  },
+
+  // ── Painel de configuração (dentro de Configurações) ──
+  renderConfigPanel() {
+    const host = document.getElementById('audit-config-panel');
+    if (!host) return;
+    const cfg = State.auditMode.config;
+
+    const bandsHtml = cfg.bands.map((b, i) => `
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:6px;margin-bottom:6px;align-items:center">
+        <input type="number" class="finput" value="${b.inMin}" onchange="AuditMode._editBand(${i},'inMin',this.value)" placeholder="Entrada mín %">
+        <input type="number" class="finput" value="${b.inMax}" onchange="AuditMode._editBand(${i},'inMax',this.value)" placeholder="Entrada máx %">
+        <input type="number" class="finput" value="${b.outMin}" onchange="AuditMode._editBand(${i},'outMin',this.value)" placeholder="Saída mín %">
+        <input type="number" class="finput" value="${b.outMax}" onchange="AuditMode._editBand(${i},'outMax',this.value)" placeholder="Saída máx %">
+        <button onclick="AuditMode._removeBand(${i})" style="color:var(--red);background:none;border:none;cursor:pointer;font-size:16px">✕</button>
+      </div>`).join('');
+
+    const defectNames = [...new Set((State.scrap||[]).map(r => r.defectDesc).filter(Boolean))].sort();
+    const defectsHtml = defectNames.map(name => {
+      const rule = cfg.defectRules[name] || { state: 'visible' };
+      const targets = defectNames.filter(n => n !== name);
+      return `
+      <div style="display:grid;grid-template-columns:1fr 140px 1fr;gap:8px;margin-bottom:5px;align-items:center;font-size:12px">
+        <span>${name}</span>
+        <select class="fselect" onchange="AuditMode._editDefect('${name.replace(/'/g,"\\'")}','state',this.value)">
+          <option value="visible" ${rule.state==='visible'?'selected':''}>Visível</option>
+          <option value="hidden" ${rule.state==='hidden'?'selected':''}>Oculto</option>
+          <option value="merged" ${rule.state==='merged'?'selected':''}>Mesclado em...</option>
+        </select>
+        ${rule.state==='merged' ? `
+        <select class="fselect" onchange="AuditMode._editDefect('${name.replace(/'/g,"\\'")}','target',this.value)">
+          <option value="">— escolha —</option>
+          ${targets.map(t=>`<option value="${t}" ${rule.target===t?'selected':''}>${t}</option>`).join('')}
+        </select>` : '<span></span>'}
+      </div>`;
+    }).join('');
+
+    host.innerHTML = `
+      <div style="margin-bottom:16px">
+        <div class="ff" style="font-weight:700;font-size:12px;margin-bottom:8px">Faixas de Transformação do Índice (%)</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Comprime o índice real numa escala reduzida, preservando a ordem relativa — não corta tudo no mesmo teto.</div>
+        ${bandsHtml}
+        <button onclick="AuditMode._addBand()" style="margin-top:4px;padding:6px 14px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text-dim);font-size:11px;cursor:pointer">+ Adicionar faixa</button>
+      </div>
+      <div style="margin-bottom:16px">
+        <div class="ff" style="font-weight:700;font-size:12px;margin-bottom:8px">Exclusão: Produção Baixa + Refugo Alto</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label style="font-size:11px;color:var(--text-muted)">Produção mínima (pç)</label>
+            <input type="number" class="finput" style="width:100%" value="${cfg.exclusao.producaoMin}" onchange="AuditMode._editExclusao('producaoMin',this.value)">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-muted)">Índice máximo aceitável (%)</label>
+            <input type="number" class="finput" style="width:100%" value="${cfg.exclusao.indiceMax}" onchange="AuditMode._editExclusao('indiceMax',this.value)">
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:4px">0 em qualquer campo desativa a regra. Registros com produção abaixo do mínimo E índice acima do máximo são excluídos da visão de auditoria.</div>
+      </div>
+      <div style="margin-bottom:16px">
+        <div class="ff" style="font-weight:700;font-size:12px;margin-bottom:8px">Defeitos</div>
+        ${defectsHtml || '<div style="font-size:11px;color:var(--text-muted)">Nenhum defeito encontrado nos dados carregados.</div>'}
+      </div>
+      <button onclick="AuditMode.saveConfig()" style="padding:9px 20px;background:rgba(79,124,255,.12);border:1px solid rgba(79,124,255,.4);border-radius:7px;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer">Salvar Configuração</button>
+    `;
+  },
+
+  _editBand(i, field, val) { State.auditMode.config.bands[i][field] = parseFloat(val) || 0; },
+  _addBand() {
+    const bands = State.auditMode.config.bands;
+    const last = bands[bands.length - 1];
+    bands.push({ inMin: last.inMax, inMax: 100, outMin: last.outMax, outMax: last.outMax + 1 });
+    this.renderConfigPanel();
+  },
+  _removeBand(i) { State.auditMode.config.bands.splice(i, 1); this.renderConfigPanel(); },
+  _editDefect(name, field, val) {
+    if (!State.auditMode.config.defectRules[name]) State.auditMode.config.defectRules[name] = { state: 'visible' };
+    State.auditMode.config.defectRules[name][field] = val;
+    if (field === 'state') this.renderConfigPanel();
+  },
+  _editExclusao(field, val) { State.auditMode.config.exclusao[field] = parseFloat(val) || 0; }
 };
 
 const PDM = {
@@ -5794,6 +6085,12 @@ async function boot() {
     UI._initFilters();
     UI.renderDBSummary();
     document.querySelectorAll('.admin-tab').forEach(el => el.style.display = 'none');
+
+    // v12.17 — Modo Auditoria: carrega config compartilhada e restaura estado ativo
+    await AuditMode.loadConfig();
+    try {
+      if (localStorage.getItem('scrapiq-audit-active') === '1') AuditMode.toggle(true);
+    } catch(e) {}
 //cecc
   } catch(e) {
     dbgErr(e);
