@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.21 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.22 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.21</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.22</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -4265,6 +4265,7 @@ const StateAudit = {
   filterWeek: null,
   filterYear: null,
   filterSearch: '',
+  _defaultsApplied: false, // v12.22: mês atual + diário só na 1ª abertura
 };
 
 const StateEq = {
@@ -5640,13 +5641,14 @@ const AuditMode = {
 
   // Agregação única: totais, por turno, por defeito, por produto — já
   // respeitando turnos ativos e a divisão do ND
-  _computeAgg(data) {
+  _computeAgg(data, shiftSetOverride) {
+    const activeSet = shiftSetOverride || StateAudit.activeShifts;
     const byShift = {}; REAL_SHIFT_KEYS.forEach(k => byShift[k] = { qty: 0, def: 0 });
     const byDefect = {};
     const byProduct = {};
     let totalQty = 0, totalDef = 0;
     data.forEach(r => {
-      const contribs = this._shiftContribs(r).filter(([sk]) => StateAudit.activeShifts.has(sk));
+      const contribs = this._shiftContribs(r).filter(([sk]) => activeSet.has(sk));
       if (!contribs.length) return;
       let rowWeight = 0;
       contribs.forEach(([sk, w]) => {
@@ -5697,6 +5699,23 @@ const AuditMode = {
     return shownDef / totalDef;
   },
 
+  // v12.22 — CORREÇÃO CRÍTICA: o fator não pode depender do filtro atual,
+  // senão o mesmo registro real vira números diferentes dependendo de você
+  // estar olhando o mês inteiro ou um único dia (ex: 25 vs 10 peças do
+  // mesmo item no mesmo dia). Agora ancorado em TODA a base carregada —
+  // sempre com os 3 turnos, sem filtro de data/busca — recalculado só
+  // quando o volume de dados muda (nova importação). Isso garante que
+  // qualquer soma/quebra por filtro sempre feche com o total agregado.
+  _globalFactor() {
+    const all = State.scrap || [];
+    if (this._cachedFactor != null && this._cachedFactorLen === all.length) return this._cachedFactor;
+    const agg = this._computeAgg(all, new Set(REAL_SHIFT_KEYS));
+    const factor = this._scaleFactor(agg.totalDef, agg.totalQty);
+    this._cachedFactor = factor;
+    this._cachedFactorLen = all.length;
+    return factor;
+  },
+
   // ── Filtros: handlers (mesma UX do Dashboard, sem custo/meta/ND) ──
   _initFilters() {
     const data = State.scrap || [];
@@ -5706,6 +5725,21 @@ const AuditMode = {
       if (r.year != null && r.month != null) mSet.add(`${r.year}-${String(r.month).padStart(2,'0')}`);
       if (r.week) weekSet.add(r.week);
     });
+
+    // v12.22 — padrão de abertura: mês atual (ou o mais recente com dados),
+    // detalhamento diário — só na primeira vez (nenhum filtro ainda ativo).
+    if (!StateAudit._defaultsApplied && !StateAudit.filterYear && !StateAudit.filterMonth && !StateAudit.filterFrom && !StateAudit.filterWeek) {
+      const now = new Date();
+      const curMonthKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+      if (mSet.has(curMonthKey)) {
+        StateAudit.filterMonth = curMonthKey;
+      } else if (mSet.size) {
+        StateAudit.filterMonth = [...mSet].sort().reverse()[0]; // mês mais recente com dados
+      }
+      StateAudit.scope = 'day';
+      StateAudit._defaultsApplied = true;
+    }
+
     const mn = (I18n.t('months.short') || 'Jan,Fev,Mar,Abr,Mai,Jun,Jul,Ago,Set,Out,Nov,Dez').split(',');
     const ySel = document.getElementById('audit-f-year-sel');
     if (ySel) ySel.innerHTML = '<option value="">— Ano —</option>' + [...yearSet].sort().reverse().map(y => `<option value="${y}" ${StateAudit.filterYear===y?'selected':''}>${y}</option>`).join('');
@@ -5802,6 +5836,7 @@ const AuditMode = {
     StateAudit.filterSearch = '';
     StateAudit.scope = 'day';
     StateAudit.activeShifts = new Set(REAL_SHIFT_KEYS);
+    StateAudit._defaultsApplied = false; // v12.22: reaplica mês atual + diário
     document.getElementById('audit-shift-toggles').dataset.built = '';
     this.render();
   },
@@ -5811,17 +5846,19 @@ const AuditMode = {
     this._initFilters();
     const raw = this._auditFiltered(State.scrap || []);
     const agg = this._computeAgg(raw);
-    const factor = this._scaleFactor(agg.totalDef, agg.totalQty);
+    const factor = this._globalFactor(); // v12.22: âncora fixa, não muda com o filtro
     this._lastFactor = factor; // reutilizado pelo drill-down
 
-    const realIdx = scrapRate(agg.totalDef, agg.totalQty);
-    const shownIdx = this.transformPct(realIdx);
     const shownDef = agg.totalDef * factor;
+    // Índice derivado do Refugo já escalado (não recalcula a transformação
+    // de novo por filtro) — garante que Índice e Refugo sempre fechem conta
+    // entre si, e que drilar num dia específico bata com o total do mês.
+    const shownIdx = scrapRate(shownDef, agg.totalQty);
 
     const elIdx = document.getElementById('audit-k-idx');
     const elQty = document.getElementById('audit-k-scrap');
     const elProd = document.getElementById('audit-k-prod');
-    if (elIdx) elIdx.textContent = shownIdx.toFixed(2) + '%';
+    if (elIdx) elIdx.textContent = shownIdx.toFixed(1) + '%';
     if (elQty) elQty.textContent = Math.round(shownDef).toLocaleString('pt-BR');
     if (elProd) elProd.textContent = Math.round(agg.totalQty).toLocaleString('pt-BR');
 
@@ -5884,7 +5921,7 @@ const AuditMode = {
         data: rawKeys.map(k => {
           const b = buckets[k]?.[s];
           if (!b) return 0;
-          if (M === 'qty') return b.def * factor;
+          if (M === 'qty') return Math.round(b.def * factor); // v12.22: inteiro
           return 0; // pct preenchido abaixo
         }),
         backgroundColor: meta.rgba, borderColor: meta.color, borderWidth: 1, borderRadius: 3, stack: 'main', order: 2
@@ -5895,8 +5932,9 @@ const AuditMode = {
         ds.data = rawKeys.map(k => {
           let td = 0, tq = 0;
           activeKeys.forEach(s => { td += (buckets[k]?.[s]?.def || 0); tq += (buckets[k]?.[s]?.qty || 0); });
-          const real = scrapRate(td, tq);
-          return this.transformPct(real);
+          // v12.22: índice derivado do MESMO fator global (não transformPct
+          // por bucket) — garante que a soma dos buckets bata com o total.
+          return scrapRate(td * factor, tq);
         });
         if (idx > 0) ds.data = rawKeys.map(() => 0);
       });
@@ -5925,7 +5963,7 @@ const AuditMode = {
     const totalDef = activeKeys.reduce((s,k) => s + agg.byShift[k].def, 0);
     const vals = activeKeys.map(s => {
       const d = agg.byShift[s].def;
-      return M === 'pct' ? (totalDef > 0 ? (d/totalDef)*100 : 0) : d * factor;
+      return M === 'pct' ? (totalDef > 0 ? (d/totalDef)*100 : 0) : Math.round(d * factor); // v12.22: inteiro
     });
     this.makeAuditChart('chart-audit-shiftdist', {
       type: 'bar',
@@ -5950,7 +5988,7 @@ const AuditMode = {
     const sorted = arr.slice(0, N);
     const labels = sorted.map(x => x.code);
     const descMap = {}; sorted.forEach(x => descMap[x.code] = x.desc);
-    const barData = sorted.map(x => M === 'pct' ? this.transformPct(x.realVal) : x.def * factor);
+    const barData = sorted.map(x => M === 'pct' ? scrapRate(x.def * factor, x.qty) : Math.round(x.def * factor)); // v12.22: índice consistente + inteiro
 
     const chart = this.makeAuditChart('chart-audit-product-pareto', {
       type: 'bar',
@@ -5960,7 +5998,7 @@ const AuditMode = {
         onClick: (evt, els) => { if (!els.length) return; const i = els[0].index; this._drillDown(sorted[i].code, sorted[i].desc); },
         plugins: { ...CHART_DEFAULTS.plugins, tooltip: { callbacks: {
           title: ctx => { const code = ctx[0].label; const d = descMap[code]||''; return d ? `${code} — ${d}` : code; },
-          label: ctx => M==='pct' ? `Índice: ${ctx.raw.toFixed(2)}%` : `Qtd: ${ctx.raw.toLocaleString('pt-BR')} pç`
+          label: ctx => M==='pct' ? `Índice: ${ctx.raw.toFixed(1)}%` : `Qtd: ${ctx.raw.toLocaleString('pt-BR')} pç`
         }}},
         scales: {
           x: { ...CHART_DEFAULTS.scales.x, ticks:{ color:'#5d6882', font:{size:10}, maxRotation:40 } },
@@ -6031,7 +6069,7 @@ const AuditMode = {
     const activeKeys = REAL_SHIFT_KEYS.filter(s => StateAudit.activeShifts.has(s));
     const datasets = activeKeys.map(s => {
       const meta = SHIFTS[s];
-      return { label: meta.lbl, data: rawKeys.map(k => (buckets[k]?.[s]?.def||0)*factor), backgroundColor: meta.rgba, borderColor: meta.color, borderWidth:1, borderRadius:3, stack:'main' };
+      return { label: meta.lbl, data: rawKeys.map(k => Math.round((buckets[k]?.[s]?.def||0)*factor)), backgroundColor: meta.rgba, borderColor: meta.color, borderWidth:1, borderRadius:3, stack:'main' }; // v12.22: inteiro
     });
     this.makeAuditChart('chart-audit-drill-hist', {
       type:'bar', data:{ labels, datasets },
@@ -6053,7 +6091,7 @@ const AuditMode = {
     const sortedDef = Object.entries(byDef).sort((a,b)=>b[1]-a[1]).slice(0,8);
     this.makeAuditChart('chart-audit-drill-def', {
       type:'bar',
-      data: { labels: sortedDef.map(([k])=>k.length>30?k.slice(0,30)+'…':k), datasets:[{ data: sortedDef.map(([,v])=>v*factor), backgroundColor:'rgba(255,94,94,.65)', borderColor:'#ff5e5e', borderWidth:1.5, borderRadius:4 }] },
+      data: { labels: sortedDef.map(([k])=>k.length>30?k.slice(0,30)+'…':k), datasets:[{ data: sortedDef.map(([,v])=>Math.round(v*factor)), backgroundColor:'rgba(255,94,94,.65)', borderColor:'#ff5e5e', borderWidth:1.5, borderRadius:4 }] }, // v12.22: inteiro
       options: { ...CHART_DEFAULTS, indexAxis:'y', plugins:{legend:{display:false}}, scales: {
         x:{ beginAtZero:true, grace:'12%', ticks:{color:'#5d6882',font:{size:10}}, grid:{color:'#1f2437'} },
         y:{ ticks:{color:'#e8eaf2',font:{size:11}}, grid:{display:false} }
