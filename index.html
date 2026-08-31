@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.20 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.21 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.20</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.21</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -217,7 +217,7 @@ main{flex:1;display:flex;flex-direction:column}
 </header>
 
 <div class="tab-bar">
-  <button class="tab-btn active" data-tab="dash" onclick="UI.switchTab('dash')" data-i18n="tab.dashboard">Dashboard</button>
+  <button class="tab-btn active" data-tab="dash" onclick="UI.dashTabClick(event)" data-i18n="tab.dashboard">Dashboard</button>
   <button class="tab-btn" data-tab="dasheq" onclick="UI.switchTab('dasheq')" data-i18n="tab.dasheq">Por Equipamento</button>
   <button class="tab-btn" data-tab="strat" onclick="UI.switchTab('strat')" data-i18n="tab.strat">Estratificação</button>
   <button class="tab-btn" data-tab="pdm" onclick="UI.switchTab('pdm')" data-i18n="tab.pdm">Resumo PDM</button>
@@ -756,9 +756,16 @@ create policy "scrapiq_all" on scrapiq_store
   </div>
 
   <div class="kpi-grid" style="margin-bottom:20px">
-    <div class="kpi c1"><div class="kpi-lbl">Total Peças Boas</div><div class="kpi-val" id="audit-k-prod">—</div></div>
-    <div class="kpi c2"><div class="kpi-lbl">Total Scrap</div><div class="kpi-val" id="audit-k-scrap">—</div></div>
-    <div class="kpi c3"><div class="kpi-lbl">Índice de Scrap</div><div class="kpi-val" id="audit-k-idx">—</div></div>
+    <div class="kpi c1"><div class="kpi-lbl">Total Peças Boas</div><div class="kpi-val" id="audit-k-prod">—</div><div class="kpi-sub">peças boas no período</div></div>
+    <div class="kpi c2"><div class="kpi-lbl">Total Scrap</div><div class="kpi-val" id="audit-k-scrap">—</div><div class="kpi-sub">peças refugadas</div></div>
+    <div class="kpi c3"><div class="kpi-lbl">Índice de Scrap</div><div class="kpi-val" id="audit-k-idx">—</div><div class="kpi-sub">scrap ÷ (scrap + boas)</div></div>
+  </div>
+
+  <div id="audit-period-bar" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:9px 16px;margin-bottom:14px;align-items:center;gap:8px;font-size:11px;color:var(--text-muted)">
+    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+    <span style="font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.6px;font-size:10px">Período analisado</span>
+    <span id="audit-period-label" style="font-family:'DM Mono',monospace;color:var(--accent);font-weight:500"></span>
+    <span id="audit-period-records" style="margin-left:auto;font-family:'DM Mono',monospace;color:var(--text-muted)"></span>
   </div>
 
   <div class="chart-card chart-grid-full">
@@ -766,25 +773,28 @@ create policy "scrapiq_all" on scrapiq_store
     <div class="chart-h300"><canvas id="chart-audit-temporal"></canvas></div>
   </div>
 
-  <div class="chart-card chart-grid-full" style="margin-top:14px">
-    <div class="chart-title"><span>Distribuição de Defeitos por Turno</span></div>
-    <div class="chart-h300"><canvas id="chart-audit-shiftdist"></canvas></div>
-  </div>
-
-  <div class="chart-card chart-grid-full" style="margin-top:14px">
-    <div class="chart-title">
-      <span>Pareto de Produtos</span>
-      <input type="number" class="num-input" id="audit-top-n" value="10" min="3" max="30" onchange="AuditMode.render()" style="margin-left:auto">
+  <div class="chart-grid-2">
+    <div class="chart-card">
+      <div class="chart-title">Distribuição de Defeitos por Turno</div>
+      <div class="chart-h250"><canvas id="chart-audit-shiftdist"></canvas></div>
     </div>
-    <div class="chart-h300"><canvas id="chart-audit-product-pareto"></canvas></div>
+    <div class="chart-card">
+      <div class="chart-title">
+        <span>Pareto de Produtos</span>
+        <input type="number" class="num-input" id="audit-top-n" value="10" min="3" max="30" onchange="AuditMode.render()" title="Top N produtos" style="margin-left:auto">
+      </div>
+      <div class="chart-h250"><canvas id="chart-audit-product-pareto"></canvas></div>
+    </div>
   </div>
 
-  <div id="audit-drilldown" style="margin-top:14px"></div>
-
-  <div class="chart-card chart-grid-full" style="margin-top:14px">
-    <div class="chart-title"><span>Principais Defeitos</span></div>
-    <div class="chart-h300"><canvas id="chart-audit-pareto"></canvas></div>
+  <div id="audit-drilldown">
+    <div class="empty">
+      <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="m13 13 6 6"/></svg>
+      <div style="font-weight:600;font-size:14px">Clique em um produto no Pareto</div>
+      <div style="font-size:12px">para ver o histórico detalhado e os principais defeitos</div>
+    </div>
   </div>
+
 </div>
 </main>
 </div><script>
@@ -819,9 +829,15 @@ const chartDatalabelsPlugin = {
     const { ctx, data } = chart;
     const cid = chart.canvas.id;
     
-    // Define se estamos pegando a métrica do Dash Principal ou do DashEq
-    const M = cid.includes('-eq-') 
+    // Define se estamos pegando a métrica do Dash Principal, DashEq ou da
+    // aba Refugo (Modo Auditoria) — v12.21: antes, qualquer canvas com
+    // "pareto" no id (inclusive os da aba Refugo) caía sempre na métrica do
+    // Dashboard, herdando formatação de custo (R$) mesmo em gráficos que só
+    // mostram quantidade.
+    const M = cid.includes('-eq-')
       ? (typeof StateEq !== 'undefined' ? StateEq.globalMetric : 'qty')
+      : cid.includes('audit')
+      ? (typeof StateAudit !== 'undefined' ? StateAudit.globalMetric : 'qty')
       : (typeof State !== 'undefined' ? State.globalMetric : 'qty');
 
     chart.data.datasets.forEach((ds, di) => {
@@ -3172,6 +3188,16 @@ renderDrilldown(mat, desc, scroll = false) {
 // UI & FILE HANDLING
 // ═══════════════════════════════
 const UI = {
+  // v12.21 — Shift+Clique na aba Dashboard ativa o Modo Auditoria direto,
+  // sem precisar passar por Configurações. Sem toast/aviso, conforme pedido.
+  dashTabClick(event) {
+    if (event && event.shiftKey) {
+      AuditMode.toggle(true);
+      return;
+    }
+    this.switchTab('dash');
+  },
+
   switchTab(tab) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab===tab));
     document.querySelectorAll('.tab-view').forEach(v => v.classList.toggle('active', v.id==='view-'+tab));
@@ -5799,12 +5825,44 @@ const AuditMode = {
     if (elQty) elQty.textContent = Math.round(shownDef).toLocaleString('pt-BR');
     if (elProd) elProd.textContent = Math.round(agg.totalQty).toLocaleString('pt-BR');
 
+    this._updatePeriodBar(raw);
     this._renderTemporal(raw, factor);
     this._renderShiftDist(agg, factor);
     this._renderProductPareto(agg, factor);
-    this._renderDefectPareto(agg, factor);
+    // v12.21 — Pareto de Defeitos "solo" removido: não existia na referência
+    // original (só a quebra por defeito DENTRO do drill-down de produto, que
+    // já existe em _refreshDrill). Também era a fonte do bug de formatação
+    // em R$ herdada por engano da métrica do Dashboard.
 
     if (StateAudit.drillMat) this._refreshDrill(raw, factor);
+  },
+
+  // Barra "Período analisado" — mesma lógica do Dashboard, adaptada à StateAudit
+  _updatePeriodBar(data) {
+    const bar = document.getElementById('audit-period-bar');
+    const label = document.getElementById('audit-period-label');
+    const recEl = document.getElementById('audit-period-records');
+    if (!bar || !label || !recEl) return;
+    let txt = '';
+    const mn = (I18n.t('months.short') || 'Jan,Fev,Mar,Abr,Mai,Jun,Jul,Ago,Set,Out,Nov,Dez').split(',');
+    if (StateAudit.filterMonth) {
+      const [y, mo] = StateAudit.filterMonth.split('-');
+      txt = `${mn[parseInt(mo)-1]}/${y}`;
+    } else if (StateAudit.filterWeek) {
+      txt = StateAudit.filterWeek;
+    } else if (StateAudit.filterFrom || StateAudit.filterTo) {
+      const fmt = iso => { if (!iso) return '—'; const [y,m,d] = iso.split('-'); return `${d}/${m}/${y.slice(2)}`; };
+      txt = `${fmt(StateAudit.filterFrom)} até ${fmt(StateAudit.filterTo)}`;
+    } else if ((State.scrap||[]).length) {
+      const dts = State.scrap.map(r=>r.date).sort();
+      const f = dts[0].split('-'), t = dts[dts.length-1].split('-');
+      txt = `${f[2]}/${f[1]}/${f[0].slice(2)} até ${t[2]}/${t[1]}/${t[0].slice(2)} (Total da Base)`;
+    } else {
+      txt = 'Nenhum dado carregado';
+    }
+    bar.style.display = 'flex';
+    label.textContent = txt;
+    recEl.textContent = `${data.length} lançamentos filtrados`;
   },
 
   _renderTemporal(raw, factor) {
@@ -5911,25 +5969,6 @@ const AuditMode = {
       }
     });
     if (chart && chart.canvas) chart.canvas.style.cursor = 'pointer';
-  },
-
-  _renderDefectPareto(agg, factor) {
-    const entries = Object.entries(agg.byDefect).sort((a,b) => b[1]-a[1]).slice(0, 10);
-    const labels = entries.map(([k]) => k.length > 30 ? k.slice(0,30)+'…' : k);
-    const vals = entries.map(([,v]) => v * factor);
-    this.makeAuditChart('chart-audit-pareto', {
-      type: 'bar',
-      data: { labels, datasets: [{ data: vals, backgroundColor:'rgba(255,94,94,.65)', borderColor:'#ff5e5e', borderWidth:1.5, borderRadius:4 }] },
-      options: {
-        ...CHART_DEFAULTS,
-        indexAxis: 'y',
-        plugins: { legend: { display:false } },
-        scales: {
-          x: { beginAtZero:true, grace:'12%', ticks:{ color:'#5d6882', font:{size:10} }, grid:{ color:'#1f2437' } },
-          y: { ticks:{ color:'#e8eaf2', font:{size:11} }, grid:{ display:false } }
-        }
-      }
-    });
   },
 
   // ── Drill-down de produto: histórico + defeitos do item (sem ocorrências) ──
