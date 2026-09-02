@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.25 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.26 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.25</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.26</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -1110,6 +1110,7 @@ const Supa = {
     if (store === 'aliases') return String(item.code);
     if (store === 'goals')   return 'global';   // v11.9: meta única compartilhada
     if (store === 'audit_config') return 'global'; // v12.17: config única compartilhada do Modo Auditoria
+    if (store === 'sync_flags') return 'global'; // v12.26: sinal de exclusão/substituição pra outros apps (Dash SF, etc.)
     if (store === 'stopcodes') return String(item.code); // v12.0: catálogo de motivos de parada
     if (store === 'registros') return this._hash(`${item.data}|${item.turno}|${item.codigo}`); // v12.0
     // ocorrencias: mesma chave composta usada no dedup local
@@ -1555,8 +1556,20 @@ const DataService = {
   // a PRÓXIMA carga a ser completa, garantindo que o cache não fique com
   // lixo. Custa um resync cheio ocasional (import do dia, exclusão), não
   // a cada abertura — o ganho de egress do dia a dia continua de pé.
+  //
+  // v12.26 — além de invalidar o PRÓPRIO cache local, grava um sinal
+  // compartilhado (store='sync_flags', doc={lastDestructive: <ISO>}) que
+  // qualquer outro app consumidor do mesmo banco (Dash SF, Scrap Analytics)
+  // pode checar: "algo foi apagado/substituído depois da minha última
+  // atualização completa? então preciso recarregar tudo". Sem isso, apps
+  // que só leem não têm como saber de exclusões feitas por aqui — o
+  // gatilho updated_at nunca dispara em delete.
   invalidateSync() {
     try { localStorage.removeItem('scrapiq-last-sync'); } catch(e) {}
+    if (Supa.active) {
+      Supa.putMany('sync_flags', [{ lastDestructive: new Date().toISOString() }])
+        .catch(e => dbgErr('invalidateSync — sinal compartilhado falhou:', e));
+    }
   },
 
   async _replaceCacheLocally(data) {
