@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.24 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.25 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.24</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.25</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -1144,6 +1144,14 @@ const Supa = {
     return this._fetchPaged(store, 'key', rows => rows.map(x => x.key), null, qs);
   },
 
+  // v12.25 — sincronização incremental: busca só linhas alteradas depois de
+  // um carimbo de tempo (coluna updated_at + gatilho no Postgres, atualizada
+  // automaticamente em qualquer insert/update, não importa por onde veio).
+  async getUpdatedSince(store, isoTimestamp) {
+    const qs = `&updated_at=gt.${encodeURIComponent(isoTimestamp)}`;
+    return this._fetchPaged(store, 'doc', rows => rows.map(x => x.doc), null, qs);
+  },
+
   // Contagem sem baixar dados (Range 0-0 + count=exact → Content-Range: 0-0/total)
   async count(store) {
     const r = await this._req(`${this._base()}?store=eq.${store}&select=key`, {
@@ -1329,6 +1337,7 @@ const DataService = {
   async saveCosts(rows) {
     await this.clear('costs');
     await this.putMany('costs', rows);
+    if (Supa.active) this.invalidateSync(); // v12.25: clear() apaga sem passar por updated_at
   },
 
   async appendScrap(rows) {
@@ -1408,6 +1417,7 @@ const DataService = {
       for (const d of dates) removed += await Supa.deleteRegistrosByDate(d);
       const clean = rows.map(r => { const rec = {...r}; delete rec.id; return rec; });
       await Supa.putMany('registros', clean);
+      this.invalidateSync(); // v12.25: delete não aparece pro sync incremental
       return { added: rows.length, removed, dates };
     }
 
@@ -1450,6 +1460,7 @@ const DataService = {
   async saveAliases(rows) {
     await this.clear('aliases');
     await this.putMany('aliases', rows);
+    if (Supa.active) this.invalidateSync(); // v12.25: clear() apaga sem passar por updated_at
   },
 
   async loadAll() {
@@ -1462,6 +1473,103 @@ const DataService = {
       this.getAll('registros'), this.getAll('stopcodes')
     ]);
     return { costs, scrap, ocorrencias, aliases, registros, stopcodes };
+  },
+
+  // v12.25 — CARREGAMENTO INCREMENTAL: reduz egress no plano gratuito do
+  // Supabase. Depende da coluna `updated_at` + gatilho criados no banco
+  // (mantida automaticamente pelo Postgres em qualquer insert/update,
+  // não importa por onde a escrita veio — tela, console, outro app).
+  //
+  // 1ª sincronização de sempre: carga completa (como antes), grava cópia
+  // local no IndexedDB e guarda o carimbo de tempo em localStorage.
+  // Sincronizações seguintes: lê a cópia local (instantâneo) e busca da
+  // nuvem só o que mudou depois do último carimbo — upsert no cache local.
+  //
+  // 'ocorrencias' (store congelado desde a unificação v12.0 — nada mais
+  // escreve nele, nenhuma tela lê para cálculo) NÃO entra mais nesse
+  // carregamento rotineiro — continua acessível sob demanda via loadAll()
+  // (usado só por backup/restauração, ação rara e explícita do usuário).
+  async loadIncremental() {
+    if (!Supa.active) return this.loadAll(); // modo local: sem rede, sem necessidade de sync
+
+    const CACHE_STORES = ['costs', 'scrap', 'aliases', 'registros', 'stopcodes'];
+    const lastSync = (() => { try { return localStorage.getItem('scrapiq-last-sync'); } catch(e) { return null; } })();
+
+    // Lê o cache local existente (vazio na 1ª vez) — sempre, independente do resto
+    const cached = {};
+    for (const store of CACHE_STORES) {
+      try { cached[store] = await this._tx(store, 'readonly', s => s.getAll()); }
+      catch(e) { cached[store] = []; }
+    }
+
+    if (!lastSync) {
+      const onProgress = (n) => { try { UI.spin(`Carregando refugo... ${n.toLocaleString('pt-BR')} registros`); } catch(e) {} };
+      const [costs, scrap, aliases, registros, stopcodes] = await Promise.all([
+        Supa.getAll('costs'), Supa.getAll('scrap', onProgress), Supa.getAll('aliases'),
+        Supa.getAll('registros'), Supa.getAll('stopcodes')
+      ]);
+      const full = { costs, scrap, aliases, registros, stopcodes };
+      await this._replaceCacheLocally(full);
+      try { localStorage.setItem('scrapiq-last-sync', new Date().toISOString()); } catch(e) {}
+      return { ...full, ocorrencias: [] };
+    }
+
+    UI.spin('Sincronizando alterações...');
+    const nowIso = new Date().toISOString();
+    const [dCosts, dScrap, dAliases, dRegistros, dStop] = await Promise.all([
+      Supa.getUpdatedSince('costs', lastSync),
+      Supa.getUpdatedSince('scrap', lastSync),
+      Supa.getUpdatedSince('aliases', lastSync),
+      Supa.getUpdatedSince('registros', lastSync),
+      Supa.getUpdatedSince('stopcodes', lastSync)
+    ]);
+
+    const merged = {
+      costs:     this._mergeByKey(cached.costs,     dCosts,     r => r.materialCode),
+      scrap:     this._mergeByKey(cached.scrap,     dScrap,     r => r.id),
+      aliases:   this._mergeByKey(cached.aliases,   dAliases,   r => r.code),
+      registros: this._mergeByKey(cached.registros, dRegistros, r => Supa.keyOf('registros', r)),
+      stopcodes: this._mergeByKey(cached.stopcodes, dStop,      r => r.code),
+    };
+
+    await this._replaceCacheLocally(merged);
+    try { localStorage.setItem('scrapiq-last-sync', nowIso); } catch(e) {}
+    return { ...merged, ocorrencias: [] };
+  },
+
+  // Upsert em memória: chaves iguais são substituídas pela versão nova
+  // (a mais recente sempre vence); chaves novas são adicionadas.
+  _mergeByKey(existing, deltas, keyFn) {
+    if (!deltas || !deltas.length) return existing || [];
+    const map = new Map((existing || []).map(r => [keyFn(r), r]));
+    deltas.forEach(r => map.set(keyFn(r), r));
+    return [...map.values()];
+  },
+
+  // Regrava o cache local (IndexedDB) por completo com o conjunto já
+  // mesclado — mantém local e nuvem coerentes a cada sincronização.
+  // v12.25 — o gatilho de updated_at só dispara em insert/update, NUNCA em
+  // delete — uma linha apagada na nuvem não aparece como "alterada" pra
+  // sincronização incremental, e ficaria "fantasma" pra sempre no cache
+  // local. Chamado sempre que algo é apagado/substituído por data — força
+  // a PRÓXIMA carga a ser completa, garantindo que o cache não fique com
+  // lixo. Custa um resync cheio ocasional (import do dia, exclusão), não
+  // a cada abertura — o ganho de egress do dia a dia continua de pé.
+  invalidateSync() {
+    try { localStorage.removeItem('scrapiq-last-sync'); } catch(e) {}
+  },
+
+  async _replaceCacheLocally(data) {
+    if (!this._db) await this.open();
+    const stores = Object.keys(data);
+    await Promise.all(stores.map(store => new Promise((res, rej) => {
+      const tx = this._db.transaction(store, 'readwrite');
+      const s = tx.objectStore(store);
+      s.clear();
+      (data[store] || []).forEach(item => s.put(item));
+      tx.oncomplete = res;
+      tx.onerror = rej;
+    })));
   },
 
   async clearAll() {
@@ -1492,6 +1600,7 @@ const DataService = {
       if (data.ocorrencias?.length) await Supa.putMany('ocorrencias', data.ocorrencias.map(i => { const rec = {...i}; delete rec.id; return rec; }));
       if (data.registros?.length)   await Supa.putMany('registros', data.registros.map(i => { const rec = {...i}; delete rec.id; return rec; })); // v12.0
       if (data.stopcodes?.length)   await Supa.putMany('stopcodes', data.stopcodes); // v12.0
+      this.invalidateSync(); // v12.25: clearAll() apaga sem passar por updated_at
       return;
     }
     if (!this._db) await this.open();
@@ -1528,6 +1637,7 @@ const DataService = {
     if (Supa.active) {
       const removed = await Supa.deleteScrapWhere('eq', dateStr);
       const remaining = await Supa.count('scrap');
+      this.invalidateSync(); // v12.25
       return { removed, remaining };
     }
     if (!this._db) await this.open();
@@ -1552,6 +1662,7 @@ const DataService = {
     if (Supa.active) {
       const removed = await Supa.deleteScrapWhere('like', monthStr + '-*');
       const remaining = await Supa.count('scrap');
+      this.invalidateSync(); // v12.25
       return { removed, remaining };
     }
     if (!this._db) await this.open();
@@ -3744,10 +3855,10 @@ const UI = {
       this.toast(I18n.t('supa.off'), 'ok');
     }
     this.supaUpdateBadge();
-    // Recarrega dados da fonte ativa
+    // Recarrega dados da fonte ativa (v12.25: incremental quando na nuvem)
     this.spin(I18n.t('supa.msg.loading'));
     try {
-      const { costs, scrap, ocorrencias, aliases, registros, stopcodes } = await DataService.loadAll();
+      const { costs, scrap, ocorrencias, aliases, registros, stopcodes } = await DataService.loadIncremental();
       State.costs = {}; costs.forEach(c => State.costs[c.materialCode] = c);
       State.scrap = scrap;
       State.ocorrencias = ocorrencias;
@@ -4073,6 +4184,7 @@ const UI = {
     UI.spin('Limpando Área A...');
     try {
       await DataService.clear('costs');
+      DataService.invalidateSync(); // v12.25
       State.costs = {};
       document.getElementById('d-cost').classList.remove('ok');
       document.getElementById('s-cost').textContent = I18n.t('status.cost.init');
@@ -4094,6 +4206,7 @@ const UI = {
     UI.spin('Limpando Área B...');
     try {
       await DataService.clear('scrap');
+      DataService.invalidateSync(); // v12.25
       State.scrap = [];
       State.drillMat = null;
       document.getElementById('d-scrap').classList.remove('ok');
@@ -4124,6 +4237,7 @@ const UI = {
       // v12.0: Plano Diário agora alimenta 'registros' (unificação Scrap Manager ↔ Dash SF).
       // 'ocorrencias' fica intocado (dados históricos, sem migração) — não é mais alimentado.
       await DataService.clear('registros');
+      DataService.invalidateSync(); // v12.25
       DataService._db = null;
       if (!Supa.active) { try { await DataService.open(); } catch(e) { dbgErr(e); } }
       State.registros = [];
@@ -4147,6 +4261,7 @@ const UI = {
     UI.spin('Limpando Área D...');
     try {
       await DataService.clear('aliases');
+      DataService.invalidateSync(); // v12.25
       State.aliases = {};
       document.getElementById('d-alias').classList.remove('ok');
       document.getElementById('s-alias').textContent = 'Alias —';
@@ -4168,6 +4283,7 @@ const UI = {
     UI.spin('Limpando...');
     try {
       await DataService.clearAll();
+      DataService.invalidateSync(); // v12.25
       DataService._db = null;
       if (!Supa.active) { try { await DataService.open(); } catch(e) { dbgErr(e); } }
       State.costs = {};
@@ -6672,7 +6788,7 @@ async function boot() {
         UI.toast('Armazenamento local indisponível neste navegador. Configure a nuvem (Supabase) em Configurações para usar o app aqui.', 'err');
       }
     }
-    const { costs, scrap, ocorrencias, aliases, registros, stopcodes } = await DataService.loadAll();
+    const { costs, scrap, ocorrencias, aliases, registros, stopcodes } = await DataService.loadIncremental();
     State.costs = {};
     costs.forEach(c => { State.costs[c.materialCode] = { materialDesc:c.materialDesc, unitCost:c.unitCost }; });
     State.scrap = scrap;
