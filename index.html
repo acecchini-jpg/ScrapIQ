@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.26 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.27 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.26</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.27</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -1110,7 +1110,7 @@ const Supa = {
     if (store === 'aliases') return String(item.code);
     if (store === 'goals')   return 'global';   // v11.9: meta única compartilhada
     if (store === 'audit_config') return 'global'; // v12.17: config única compartilhada do Modo Auditoria
-    if (store === 'sync_flags') return 'global'; // v12.26: sinal de exclusão/substituição pra outros apps (Dash SF, etc.)
+    if (store === 'sync_flags') return String(item.affectedStore || 'global'); // v12.27: sinal POR STORE afetado, não mais global
     if (store === 'stopcodes') return String(item.code); // v12.0: catálogo de motivos de parada
     if (store === 'registros') return this._hash(`${item.data}|${item.turno}|${item.codigo}`); // v12.0
     // ocorrencias: mesma chave composta usada no dedup local
@@ -1338,7 +1338,7 @@ const DataService = {
   async saveCosts(rows) {
     await this.clear('costs');
     await this.putMany('costs', rows);
-    if (Supa.active) this.invalidateSync(); // v12.25: clear() apaga sem passar por updated_at
+    if (Supa.active) this.invalidateSync('costs'); // v12.27: sinal específico do store afetado
   },
 
   async appendScrap(rows) {
@@ -1418,7 +1418,7 @@ const DataService = {
       for (const d of dates) removed += await Supa.deleteRegistrosByDate(d);
       const clean = rows.map(r => { const rec = {...r}; delete rec.id; return rec; });
       await Supa.putMany('registros', clean);
-      this.invalidateSync(); // v12.25: delete não aparece pro sync incremental
+      this.invalidateSync('registros'); // v12.27: sinal específico do store afetado
       return { added: rows.length, removed, dates };
     }
 
@@ -1461,7 +1461,7 @@ const DataService = {
   async saveAliases(rows) {
     await this.clear('aliases');
     await this.putMany('aliases', rows);
-    if (Supa.active) this.invalidateSync(); // v12.25: clear() apaga sem passar por updated_at
+    if (Supa.active) this.invalidateSync('aliases'); // v12.27: sinal específico do store afetado
   },
 
   async loadAll() {
@@ -1558,18 +1558,30 @@ const DataService = {
   // a cada abertura — o ganho de egress do dia a dia continua de pé.
   //
   // v12.26 — além de invalidar o PRÓPRIO cache local, grava um sinal
-  // compartilhado (store='sync_flags', doc={lastDestructive: <ISO>}) que
-  // qualquer outro app consumidor do mesmo banco (Dash SF, Scrap Analytics)
-  // pode checar: "algo foi apagado/substituído depois da minha última
-  // atualização completa? então preciso recarregar tudo". Sem isso, apps
-  // que só leem não têm como saber de exclusões feitas por aqui — o
-  // gatilho updated_at nunca dispara em delete.
-  invalidateSync() {
+  // compartilhado (store='sync_flags') que outros apps consumidores do
+  // mesmo banco (Dash SF, Scrap Analytics) podem checar.
+  //
+  // v12.27 — CORREÇÃO: o sinal agora é POR STORE afetado, não mais um
+  // único carimbo global. Um sinal global fazia QUALQUER exclusão em
+  // QUALQUER store (ex: reimportar Refugo) forçar recarga completa em
+  // TUDO pra qualquer consumidor — mesmo quem só lê 'registros' recarregava
+  // à toa quando só 'scrap' tinha mudado. Agora cada chamada precisa dizer
+  // qual(is) store(s) foi(ram) realmente afetado(s); cada consumidor
+  // compara só o que ele de fato usa.
+  //
+  // @param affectedStores string ou array de strings — nome(s) do(s)
+  //   store(s) que sofreram a exclusão/substituição nesta operação
+  //   (ex: 'scrap', 'registros', ou ['costs','scrap','aliases',...] no
+  //   caso de limpar tudo / restaurar backup).
+  invalidateSync(affectedStores) {
     try { localStorage.removeItem('scrapiq-last-sync'); } catch(e) {}
-    if (Supa.active) {
-      Supa.putMany('sync_flags', [{ lastDestructive: new Date().toISOString() }])
-        .catch(e => dbgErr('invalidateSync — sinal compartilhado falhou:', e));
-    }
+    if (!Supa.active) return;
+    const list = (Array.isArray(affectedStores) ? affectedStores : [affectedStores]).filter(Boolean);
+    if (!list.length) return;
+    const now = new Date().toISOString();
+    const docs = list.map(s => ({ affectedStore: s, lastDestructive: now }));
+    Supa.putMany('sync_flags', docs)
+      .catch(e => dbgErr('invalidateSync — sinal por store falhou:', e));
   },
 
   async _replaceCacheLocally(data) {
@@ -1613,7 +1625,7 @@ const DataService = {
       if (data.ocorrencias?.length) await Supa.putMany('ocorrencias', data.ocorrencias.map(i => { const rec = {...i}; delete rec.id; return rec; }));
       if (data.registros?.length)   await Supa.putMany('registros', data.registros.map(i => { const rec = {...i}; delete rec.id; return rec; })); // v12.0
       if (data.stopcodes?.length)   await Supa.putMany('stopcodes', data.stopcodes); // v12.0
-      this.invalidateSync(); // v12.25: clearAll() apaga sem passar por updated_at
+      this.invalidateSync(['costs','scrap','aliases','registros','stopcodes']); // v12.27: sinal por store
       return;
     }
     if (!this._db) await this.open();
@@ -1650,7 +1662,7 @@ const DataService = {
     if (Supa.active) {
       const removed = await Supa.deleteScrapWhere('eq', dateStr);
       const remaining = await Supa.count('scrap');
-      this.invalidateSync(); // v12.25
+      this.invalidateSync('scrap'); // v12.27: sinal específico do store afetado
       return { removed, remaining };
     }
     if (!this._db) await this.open();
@@ -1675,7 +1687,7 @@ const DataService = {
     if (Supa.active) {
       const removed = await Supa.deleteScrapWhere('like', monthStr + '-*');
       const remaining = await Supa.count('scrap');
-      this.invalidateSync(); // v12.25
+      this.invalidateSync('scrap'); // v12.27: sinal específico do store afetado
       return { removed, remaining };
     }
     if (!this._db) await this.open();
@@ -4197,7 +4209,7 @@ const UI = {
     UI.spin('Limpando Área A...');
     try {
       await DataService.clear('costs');
-      DataService.invalidateSync(); // v12.25
+      DataService.invalidateSync('costs'); // v12.27: sinal específico do store afetado
       State.costs = {};
       document.getElementById('d-cost').classList.remove('ok');
       document.getElementById('s-cost').textContent = I18n.t('status.cost.init');
@@ -4219,7 +4231,7 @@ const UI = {
     UI.spin('Limpando Área B...');
     try {
       await DataService.clear('scrap');
-      DataService.invalidateSync(); // v12.25
+      DataService.invalidateSync('scrap'); // v12.27: sinal específico do store afetado
       State.scrap = [];
       State.drillMat = null;
       document.getElementById('d-scrap').classList.remove('ok');
@@ -4250,7 +4262,7 @@ const UI = {
       // v12.0: Plano Diário agora alimenta 'registros' (unificação Scrap Manager ↔ Dash SF).
       // 'ocorrencias' fica intocado (dados históricos, sem migração) — não é mais alimentado.
       await DataService.clear('registros');
-      DataService.invalidateSync(); // v12.25
+      DataService.invalidateSync('registros'); // v12.27: sinal específico do store afetado
       DataService._db = null;
       if (!Supa.active) { try { await DataService.open(); } catch(e) { dbgErr(e); } }
       State.registros = [];
@@ -4274,7 +4286,7 @@ const UI = {
     UI.spin('Limpando Área D...');
     try {
       await DataService.clear('aliases');
-      DataService.invalidateSync(); // v12.25
+      DataService.invalidateSync('aliases'); // v12.27: sinal específico do store afetado
       State.aliases = {};
       document.getElementById('d-alias').classList.remove('ok');
       document.getElementById('s-alias').textContent = 'Alias —';
@@ -4296,7 +4308,7 @@ const UI = {
     UI.spin('Limpando...');
     try {
       await DataService.clearAll();
-      DataService.invalidateSync(); // v12.25
+      DataService.invalidateSync(['costs','scrap','aliases','registros','stopcodes']); // v12.27: sinal por store
       DataService._db = null;
       if (!Supa.active) { try { await DataService.open(); } catch(e) { dbgErr(e); } }
       State.costs = {};
