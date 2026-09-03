@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.27 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.28 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.27</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.28</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -1418,7 +1418,12 @@ const DataService = {
       for (const d of dates) removed += await Supa.deleteRegistrosByDate(d);
       const clean = rows.map(r => { const rec = {...r}; delete rec.id; return rec; });
       await Supa.putMany('registros', clean);
-      this.invalidateSync('registros'); // v12.27: sinal específico do store afetado
+      // v12.28 — BUG CORRIGIDO: antes disparava sempre, mesmo importando um
+      // dia NOVO (0 linhas removidas) — que é o caso mais comum no uso
+      // diário! Isso derrubava o cache a cada importação de rotina, fazendo
+      // a PRÓXIMA abertura sempre recarregar tudo, mesmo sem necessidade.
+      // Só precisa invalidar quando algo de fato foi substituído.
+      if (removed > 0) this.invalidateSync('registros');
       return { added: rows.length, removed, dates };
     }
 
