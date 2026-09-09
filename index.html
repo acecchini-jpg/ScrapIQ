@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.28 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.29 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.28</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.29</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -1862,9 +1862,15 @@ function prevPeriodData() {
       const fields = [norm(r.materialCode), norm(r.materialDesc), norm(r.equipmentCode), norm(getAlias(r.equipmentCode))];
       const hits = t => fields.some(f => f.includes(t));
       const tokens  = rawSearch.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').split(/\s+/).filter(Boolean);
-      const include = tokens.filter(t => !t.startsWith('-'));
       const exclude = tokens.filter(t => t.startsWith('-')).map(t => t.slice(1)).filter(Boolean);
-      if (include.some(t => !hits(t))) return false;
+      const positiveTokens = tokens.filter(t => !t.startsWith('-'));
+      const hasOrMode = positiveTokens.some(t => t.startsWith('+')); // v12.29: mesmo modo OU do Dashboard
+      const include = positiveTokens.map(t => t.startsWith('+') ? t.slice(1) : t).filter(Boolean);
+      if (hasOrMode) {
+        if (include.length && !include.some(t => hits(t))) return false;
+      } else {
+        if (include.some(t => !hits(t))) return false;
+      }
       if (exclude.some(t =>  hits(t))) return false;
     }
     return true;
@@ -2185,9 +2191,20 @@ function filtered(data) {
       ];
       const hits = term => fields.some(f => f.includes(term));
       const tokens  = rawSearch.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').split(/\s+/).filter(Boolean);
-      const include = tokens.filter(t => !t.startsWith('-'));
       const exclude = tokens.filter(t => t.startsWith('-')).map(t => t.slice(1)).filter(Boolean);
-      if (include.some(t => !hits(t))) return false;
+      const positiveTokens = tokens.filter(t => !t.startsWith('-'));
+      // v12.29 (só no Dashboard de produto) — modo OU: se algum termo
+      // positivo tiver "+", os termos positivos passam a bastar UM bater,
+      // em vez de todos (E) — permite buscar itens bem diferentes ao mesmo
+      // tempo (ex: "1153255 +1157894 +Coletor"), sem afetar a busca de
+      // sempre quando "+" não é usado.
+      const hasOrMode = positiveTokens.some(t => t.startsWith('+'));
+      const include = positiveTokens.map(t => t.startsWith('+') ? t.slice(1) : t).filter(Boolean);
+      if (hasOrMode) {
+        if (include.length && !include.some(t => hits(t))) return false;
+      } else {
+        if (include.some(t => !hits(t))) return false;
+      }
       if (exclude.some(t =>  hits(t))) return false;
     }
     return true;
@@ -5246,7 +5263,7 @@ const I18n = {
       'config.backup.sub':'Exporta ou importa todas as tabelas (custos, refugo, ocorrências e alias) em formato JSON',
       'config.backup.export':'Exportar Backup (JSON)','config.backup.import':'Importar Backup (JSON)',
       'config.theme.title':'Aparência','config.theme.sub':'Alternar entre tema escuro e claro','config.theme.btn':'🌙 Alternar Tema',
-      'search.prod':'Produto ou máquina... (ex: DOOR -WIP -4NB)','search.eq':'Equipamento ou produto... (ex: CNC -OLD)',
+      'search.prod':'Produto ou máquina... (ex: DOOR -WIP | +1153255 +Coletor p/ buscar vários)','search.eq':'Equipamento ou produto... (ex: CNC -OLD)',
       'chart.y.idx':'Índice de Refugo (%)','chart.y.cost':'Custo de Refugo (R$)','chart.y.qty':'Qtd Refugada (pç)',
       'chart.y.vol':'Vol. Produção (pç)','chart.vol.tip':'Vol. Produzido','chart.goal':'Meta','chart.acum':'Acumulado %',
       'months.short':'Jan,Fev,Mar,Abr,Mai,Jun,Jul,Ago,Set,Out,Nov,Dez',
@@ -5321,7 +5338,7 @@ const I18n = {
       'config.backup.sub':'Export or import all tables (costs, scrap, occurrences and aliases) in JSON format',
       'config.backup.export':'Export Backup (JSON)','config.backup.import':'Import Backup (JSON)',
       'config.theme.title':'Appearance','config.theme.sub':'Toggle between dark and light theme','config.theme.btn':'🌙 Toggle Theme',
-      'search.prod':'Product or machine... (e.g. DOOR -WIP -4NB)','search.eq':'Equipment or product... (e.g. CNC -OLD)',
+      'search.prod':'Product or machine... (e.g. DOOR -WIP | +1153255 +Coletor for multiple)','search.eq':'Equipment or product... (e.g. CNC -OLD)',
       'chart.y.idx':'Scrap Index (%)','chart.y.cost':'Scrap Cost ($)','chart.y.qty':'Scrap Qty (pcs)',
       'chart.y.vol':'Production Vol. (pcs)','chart.vol.tip':'Production Vol.','chart.goal':'Target','chart.acum':'Cumulative %',
       'months.short':'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',
@@ -5396,7 +5413,7 @@ const I18n = {
       'config.backup.sub':'Exporta o importa todas las tablas (costos, scrap, ocurrencias y alias) en formato JSON',
       'config.backup.export':'Exportar Backup (JSON)','config.backup.import':'Importar Backup (JSON)',
       'config.theme.title':'Apariencia','config.theme.sub':'Alternar entre tema oscuro y claro','config.theme.btn':'🌙 Alternar Tema',
-      'search.prod':'Producto o máquina... (ej: DOOR -WIP -4NB)','search.eq':'Equipo o producto... (ej: CNC -OLD)',
+      'search.prod':'Producto o máquina... (ej: DOOR -WIP | +1153255 +Coletor para varios)','search.eq':'Equipo o producto... (ej: CNC -OLD)',
       'chart.y.idx':'Índice de Scrap (%)','chart.y.cost':'Costo de Scrap ($)','chart.y.qty':'Cant. Scrap (pzas)',
       'chart.y.vol':'Vol. Producción (pzas)','chart.vol.tip':'Vol. Producido','chart.goal':'Meta','chart.acum':'Acumulado %',
       'months.short':'Ene,Feb,Mar,Abr,May,Jun,Jul,Ago,Sep,Oct,Nov,Dic',
