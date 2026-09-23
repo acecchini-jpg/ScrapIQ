@@ -429,7 +429,7 @@ main{flex:1;display:flex;flex-direction:column}
       <input type="text" class="finput" id="gp12-f-codigo" placeholder="7 dígitos" onchange="GP12Cruz.render()">
       <span class="flabel" style="margin-left:8px">Data de Ocorrência</span>
       <input type="date" class="finput" id="gp12-f-data" onchange="GP12Cruz.render()">
-      <span class="flabel" style="margin-left:8px">Nº de dias a pesquisar</span>
+      <span class="flabel" style="margin-left:8px">Nº de dias para retroceder</span>
       <input type="number" class="finput" id="gp12-f-dias" min="0" value="2" style="width:60px" onchange="GP12Cruz.render()">
       <button onclick="GP12Cruz.render()" style="margin-left:8px;padding:7px 16px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.45);border-radius:6px;color:#3b82f6;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif">🔍 Buscar</button>
       <button onclick="GP12Cruz.copyReport()" style="margin-left:auto;padding:7px 16px;background:rgba(34,201,151,.12);border:1px solid rgba(34,201,151,.45);border-radius:6px;color:#22c997;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s" onmouseover="this.style.background='rgba(34,201,151,.22)'" onmouseout="this.style.background='rgba(34,201,151,.12)'">📋 Copiar Resumo</button>
@@ -6822,11 +6822,24 @@ const GP12Cruz = {
 
     // Bloco 1 — Refugo por dia (State.scrap)
     const scrapCodigo = (State.scrap || []).filter(r => r.materialCode === codigo && inJanela(r.date));
+    // Turno do refugo SAP (State.scrap) vem como 'First/Second/Third shift' —
+    // mesma normalização usada no resumo PDM, mantida local por isolamento.
+    const shiftKey = s => {
+      if (s === 'First shift') return '1';
+      if (s === 'Second shift') return '2';
+      if (s === 'Third shift') return '3';
+      return 'ND';
+    };
+    const novoPorTurno = () => ({ '1': 0, '2': 0, '3': 0, 'ND': 0 });
+
     const refugoPorDia = {};
     scrapCodigo.forEach(r => {
-      if (!refugoPorDia[r.date]) refugoPorDia[r.date] = { produzido: 0, refugo: 0, porDefeito: {} };
+      if (!refugoPorDia[r.date]) refugoPorDia[r.date] = { produzido: 0, refugo: 0, porDefeito: {}, produzidoPorTurno: novoPorTurno(), refugoPorTurno: novoPorTurno() };
+      const sk = shiftKey(r.shift);
       refugoPorDia[r.date].produzido += r.quantityProduced || 0;
       refugoPorDia[r.date].refugo += r.defectQty || 0;
+      refugoPorDia[r.date].produzidoPorTurno[sk] += r.quantityProduced || 0;
+      refugoPorDia[r.date].refugoPorTurno[sk] += r.defectQty || 0;
       if (r.defectDesc) refugoPorDia[r.date].porDefeito[r.defectDesc] = (refugoPorDia[r.date].porDefeito[r.defectDesc] || 0) + (r.defectQty || 0);
     });
 
@@ -6837,17 +6850,23 @@ const GP12Cruz = {
       .sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')) || String(a.turno || '').localeCompare(String(b.turno || '')));
 
     // Bloco 3 — Paradas por motivo, somadas no período (todas, sem filtro de relevância)
+    // e também quebradas por dia × motivo, pra montar a tabela.
     const stopDescMap = {};
     (State.stopcodes || []).forEach(sc => { stopDescMap[sc.code] = sc.desc; });
     const paradasTotais = {};
+    const paradasPorDiaCodigo = {}; // data -> { code: min }
+    const diasComRegistro = [];
     registrosCodigo.forEach(r => {
+      if (!paradasPorDiaCodigo[r.data]) { paradasPorDiaCodigo[r.data] = {}; diasComRegistro.push(r.data); }
       Object.entries(r.paradas || {}).forEach(([code, min]) => {
         paradasTotais[code] = (paradasTotais[code] || 0) + min;
+        paradasPorDiaCodigo[r.data][code] = (paradasPorDiaCodigo[r.data][code] || 0) + min;
       });
     });
     const paradasOrdenadas = Object.entries(paradasTotais).filter(([, min]) => min > 0).sort((a, b) => b[1] - a[1]);
+    const diasParadasOrdenados = Array.from(new Set(diasComRegistro)).sort();
 
-    return { isoIni, isoFim, refugoPorDia, registrosCodigo, paradasOrdenadas, stopDescMap, planoInt };
+    return { isoIni, isoFim, refugoPorDia, registrosCodigo, paradasOrdenadas, paradasPorDiaCodigo, diasParadasOrdenados, stopDescMap, planoInt };
   },
 
   render() {
@@ -6872,26 +6891,27 @@ const GP12Cruz = {
       return;
     }
 
-    const { isoIni, isoFim, refugoPorDia, registrosCodigo, paradasOrdenadas, stopDescMap, planoInt } = this._compute(codigo, data, diasRaw);
+    const { isoIni, isoFim, refugoPorDia, registrosCodigo, paradasOrdenadas, paradasPorDiaCodigo, diasParadasOrdenados, stopDescMap, planoInt } = this._compute(codigo, data, diasRaw);
 
     let html = `<div style="font-size:11px;color:var(--text-muted);margin-bottom:12px">Período: <b style="color:var(--text)">${isoIni}</b> a <b style="color:var(--text)">${isoFim}</b></div>`;
 
     // Bloco 1 — Refugo por dia
-    html += `<div class="chart-card chart-grid-full" style="margin-bottom:14px"><div class="chart-title"><span>🔴 Refugo por dia</span></div>`;
+    html += `<div class="chart-card chart-grid-full" style="margin-bottom:14px"><div class="chart-title"><span>🔴 Refugo por dia (SAP)</span></div>`;
     if (!Object.keys(refugoPorDia).length) {
       html += `<div class="empty" style="padding:16px;color:var(--text-muted);font-size:12px">Nenhum registro para este código no período.</div>`;
     } else {
       html += Object.keys(refugoPorDia).sort().map(dt => {
         const d = refugoPorDia[dt];
         const pct = (d.produzido + d.refugo) > 0 ? (d.refugo / (d.produzido + d.refugo) * 100) : 0;
+        const porTurno = (obj) => `(T1:${this._fmtInt(obj['1'])} + T2:${this._fmtInt(obj['2'])} + T3:${this._fmtInt(obj['3'])} + ND:${this._fmtInt(obj['ND'])})`;
         const defeitos = Object.entries(d.porDefeito).sort((a, b) => b[1] - a[1])
           .map(([desc, qtd]) => `<tr style="border-bottom:1px solid var(--border)"><td style="padding:4px 10px 4px 26px;color:var(--text-dim);font-size:11px">${desc}</td><td style="padding:4px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:11px">${this._fmtInt(qtd)}</td></tr>`).join('');
         return `
           <div style="padding:10px 0;border-bottom:1px solid var(--border)">
             <div style="display:flex;gap:16px;align-items:baseline;font-size:12px;flex-wrap:wrap">
               <b style="color:var(--text)">${dt}</b>
-              <span style="color:var(--text-muted)">Produzido: <b style="color:var(--text)">${this._fmtInt(d.produzido)}</b></span>
-              <span style="color:var(--text-muted)">Refugo: <b style="color:var(--text)">${this._fmtInt(d.refugo)}</b></span>
+              <span style="color:var(--text-muted)">Produzido: <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim)">${porTurno(d.produzidoPorTurno)}</span> <b style="color:var(--text)">${this._fmtInt(d.produzido)}</b></span>
+              <span style="color:var(--text-muted)">Refugo: <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim)">${porTurno(d.refugoPorTurno)}</span> <b style="color:var(--text)">${this._fmtInt(d.refugo)}</b></span>
               <span style="color:var(--text-muted)">% Refugo: <b style="color:var(--text)">${pct.toFixed(2).replace('.', ',')}%</b></span>
             </div>
             <table style="width:100%;border-collapse:collapse;margin-top:6px">${defeitos}</table>
@@ -6930,48 +6950,74 @@ const GP12Cruz = {
     }
     html += `</div>`;
 
-    // Bloco 3 — Paradas por motivo
-    html += `<div class="chart-card chart-grid-full"><div class="chart-title"><span>⏱️ Paradas por motivo (total do período)</span></div>`;
+    // Bloco 3 — Paradas por motivo: tabela dia × motivo (minutos), com total por
+    // linha e por coluna — todos os motivos com minutos>0 no período, sem filtro.
+    html += `<div class="chart-card chart-grid-full"><div class="chart-title"><span>⏱️ Paradas por motivo</span></div>`;
     if (!paradasOrdenadas.length) {
       html += `<div class="empty" style="padding:16px;color:var(--text-muted);font-size:12px">Nenhum registro para este código no período.</div>`;
     } else {
-      const rows = paradasOrdenadas.map(([code, min]) => {
-        const desc = stopDescMap[code] || '(descrição não encontrada)';
+      const codes = paradasOrdenadas.map(([code]) => code); // já ordenados por total desc
+      const headerCells = codes.map(code => {
         const destaque = this.MOTIVOS_DESTAQUE.includes(code);
-        return `
-          <tr style="border-bottom:1px solid var(--border);${destaque ? 'background:rgba(245,158,11,.08)' : ''}">
-            <td style="padding:6px 10px;font-family:'DM Mono',monospace;font-size:11px;font-weight:600${destaque ? ';color:#f59e0b' : ''}">${destaque ? '⚠️ ' : ''}${code}</td>
-            <td style="padding:6px 10px;font-size:11px;color:var(--text-dim)">${desc}</td>
-            <td style="padding:6px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:11px">${this._fmtInt(min)} min</td>
-          </tr>`;
+        return `<th style="padding:6px 10px;text-align:right${destaque ? ';color:#f59e0b' : ''}">${destaque ? '⚠️ ' : ''}${code}</th>`;
       }).join('');
+      const bodyRows = diasParadasOrdenados.map(dt => {
+        const porCodigo = paradasPorDiaCodigo[dt] || {};
+        let totalDia = 0;
+        const cells = codes.map(code => {
+          const v = porCodigo[code] || 0;
+          totalDia += v;
+          return `<td style="padding:6px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:11px;${v === 0 ? 'color:var(--text-muted);opacity:.5' : ''}">${this._fmtInt(v)}</td>`;
+        }).join('');
+        return `<tr style="border-bottom:1px solid var(--border)"><td style="padding:6px 10px;font-family:'DM Mono',monospace;font-size:11px">${dt}</td>${cells}<td style="padding:6px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:11px;font-weight:700">${this._fmtInt(totalDia)}</td></tr>`;
+      }).join('');
+      const totalPorCodigo = Object.fromEntries(paradasOrdenadas);
+      const totalRow = codes.map(code => `<td style="padding:6px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:11px;font-weight:700">${this._fmtInt(totalPorCodigo[code] || 0)}</td>`);
+      // total geral = soma de todos os códigos (equivale à soma de todas as linhas)
+      const totalGeral = paradasOrdenadas.reduce((s, [, min]) => s + min, 0);
       html += `
+        <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:11px">
           <thead><tr style="border-bottom:2px solid var(--border);color:var(--text-muted);text-transform:uppercase;font-size:9px;letter-spacing:.5px">
-            <th style="padding:6px 10px;text-align:left">Código</th>
-            <th style="padding:6px 10px;text-align:left">Motivo</th>
-            <th style="padding:6px 10px;text-align:right">Minutos</th>
-          </tr></thead><tbody>${rows}</tbody>
+            <th style="padding:6px 10px;text-align:left">Data</th>${headerCells}<th style="padding:6px 10px;text-align:right">Total</th>
+          </tr></thead>
+          <tbody>${bodyRows}</tbody>
+          <tfoot><tr style="border-top:2px solid var(--border);font-weight:700">
+            <td style="padding:6px 10px;font-family:'DM Mono',monospace;font-size:11px">Total</td>${totalRow.join('')}<td style="padding:6px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:11px">${this._fmtInt(totalGeral)}</td>
+          </tr></tfoot>
+        </table>
+        </div>
+        <div style="margin-top:14px;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Legenda dos códigos</div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px">
+          <tbody>${codes.map(code => {
+            const desc = stopDescMap[code] || '(descrição não encontrada)';
+            const destaque = this.MOTIVOS_DESTAQUE.includes(code);
+            return `<tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:5px 10px;font-family:'DM Mono',monospace;font-weight:600;width:80px${destaque ? ';color:#f59e0b' : ''}">${destaque ? '⚠️ ' : ''}${code}</td>
+              <td style="padding:5px 10px;color:var(--text-dim)">${desc}</td>
+            </tr>`;
+          }).join('')}</tbody>
         </table>`;
     }
     html += `</div>`;
 
     cont.innerHTML = html;
-    this._lastReportText = this._buildText(codigo, isoIni, isoFim, refugoPorDia, registrosCodigo, paradasOrdenadas, stopDescMap, planoInt);
+    this._lastReportText = this._buildText(codigo, isoIni, isoFim, refugoPorDia, registrosCodigo, paradasOrdenadas, paradasPorDiaCodigo, diasParadasOrdenados, stopDescMap, planoInt);
   },
 
   // Texto plano no formato já validado em previa_manutencao_scrapiq.js — não
   // alterar sem necessidade, é colado direto no campo de Causa Raiz do Action Plan.
-  _buildText(codigo, isoIni, isoFim, refugoPorDia, registrosCodigo, paradasOrdenadas, stopDescMap, planoInt) {
+  _buildText(codigo, isoIni, isoFim, refugoPorDia, registrosCodigo, paradasOrdenadas, paradasPorDiaCodigo, diasParadasOrdenados, stopDescMap, planoInt) {
     let texto = `Cruzamento Scrap IQ — Código ${codigo} (${isoIni} a ${isoFim})\n\n`;
-    texto += 'REFUGO:\n';
+    texto += 'REFUGO (SAP):\n';
     if (!Object.keys(refugoPorDia).length) {
       texto += '  Nenhum registro no período.\n';
     } else {
       Object.keys(refugoPorDia).sort().forEach(dt => {
         const d = refugoPorDia[dt];
         const pct = (d.produzido + d.refugo) > 0 ? (d.refugo / (d.produzido + d.refugo) * 100) : 0;
-        texto += `  ${dt} — Produzido: ${d.produzido} | Refugo: ${d.refugo} | % Refugo: ${pct.toFixed(2)}%\n`;
+        const pt = obj => `(T1:${obj['1']} + T2:${obj['2']} + T3:${obj['3']} + ND:${obj['ND']})`;
+        texto += `  ${dt} — Produzido: ${pt(d.produzidoPorTurno)} ${d.produzido} | Refugo: ${pt(d.refugoPorTurno)} ${d.refugo} | % Refugo: ${pct.toFixed(2)}%\n`;
         Object.entries(d.porDefeito).sort((a, b) => b[1] - a[1]).forEach(([desc, qtd]) => { texto += `     • ${desc}: ${qtd}\n`; });
       });
     }
@@ -6984,14 +7030,25 @@ const GP12Cruz = {
         if (r.comentario) texto += `     Comentário: "${r.comentario}"\n`;
       });
     }
-    texto += '\nPARADAS POR MOTIVO (total do período):\n';
+    texto += '\nPARADAS POR MOTIVO (por dia):\n';
     if (!paradasOrdenadas.length) {
       texto += '  Nenhuma parada registrada.\n';
     } else {
+      const codes = paradasOrdenadas.map(([code]) => code);
+      texto += `  Data       | ${codes.join(' | ')} | Total\n`;
+      diasParadasOrdenados.forEach(dt => {
+        const porCodigo = paradasPorDiaCodigo[dt] || {};
+        let totalDia = 0;
+        const vals = codes.map(code => { const v = porCodigo[code] || 0; totalDia += v; return v; });
+        texto += `  ${dt} | ${vals.join(' | ')} | ${totalDia}\n`;
+      });
+      const totalGeral = paradasOrdenadas.reduce((s, [, min]) => s + min, 0);
+      texto += `  Total      | ${paradasOrdenadas.map(([, min]) => min).join(' | ')} | ${totalGeral}\n`;
+      texto += '\nLEGENDA DOS CÓDIGOS:\n';
       paradasOrdenadas.forEach(([code, min]) => {
         const desc = stopDescMap[code] || '(descrição não encontrada)';
         const destaque = this.MOTIVOS_DESTAQUE.includes(code) ? ' ⚠️ MANUTENÇÃO/SETUP' : '';
-        texto += `  ${code} - ${desc}: ${min} min${destaque}\n`;
+        texto += `  ${code} - ${desc}: ${min} min total${destaque}\n`;
       });
     }
     return texto;
