@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.29 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.30 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.29</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.30</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -221,6 +221,7 @@ main{flex:1;display:flex;flex-direction:column}
   <button class="tab-btn" data-tab="dasheq" onclick="UI.switchTab('dasheq')" data-i18n="tab.dasheq">Por Equipamento</button>
   <button class="tab-btn" data-tab="strat" onclick="UI.switchTab('strat')" data-i18n="tab.strat">Estratificação</button>
   <button class="tab-btn" data-tab="pdm" onclick="UI.switchTab('pdm')" data-i18n="tab.pdm">Resumo PDM</button>
+  <button class="tab-btn" data-tab="gp12" onclick="UI.switchTab('gp12')">Cruzamento GP12</button>
   <button class="tab-btn admin-tab" data-tab="import" onclick="UI.switchTab('import')" style="display:none" data-i18n="tab.import">Importar Dados</button>
   <button class="tab-btn admin-tab" data-tab="config" onclick="UI.switchTab('config')" style="display:none" data-i18n="tab.config">Configurações</button>
   <button class="tab-btn audit-tab" data-tab="audit" onclick="UI.switchTab('audit')" style="display:none">Refugo</button>
@@ -421,6 +422,21 @@ main{flex:1;display:flex;flex-direction:column}
   </div>
 
   <div id="pdm-shifts-container" style="display:flex;flex-direction:column;gap:14px;margin-top:6px"></div>
+</div><div id="view-gp12" class="tab-view">
+  <div class="filter-bar">
+    <div class="filter-row">
+      <span class="flabel">Código do Produto</span>
+      <input type="text" class="finput" id="gp12-f-codigo" placeholder="7 dígitos" onchange="GP12Cruz.render()">
+      <span class="flabel" style="margin-left:8px">Data de Ocorrência</span>
+      <input type="date" class="finput" id="gp12-f-data" onchange="GP12Cruz.render()">
+      <span class="flabel" style="margin-left:8px">Nº de dias a pesquisar</span>
+      <input type="number" class="finput" id="gp12-f-dias" min="0" value="2" style="width:60px" onchange="GP12Cruz.render()">
+      <button onclick="GP12Cruz.render()" style="margin-left:8px;padding:7px 16px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.45);border-radius:6px;color:#3b82f6;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif">🔍 Buscar</button>
+      <button onclick="GP12Cruz.copyReport()" style="margin-left:auto;padding:7px 16px;background:rgba(34,201,151,.12);border:1px solid rgba(34,201,151,.45);border-radius:6px;color:#22c997;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s" onmouseover="this.style.background='rgba(34,201,151,.22)'" onmouseout="this.style.background='rgba(34,201,151,.12)'">📋 Copiar Resumo</button>
+    </div>
+  </div>
+
+  <div id="gp12-content" style="margin-top:14px"></div>
 </div><div id="view-strat" class="tab-view">
 
   <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:9px 16px;margin-bottom:14px;display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-muted)">
@@ -3405,6 +3421,7 @@ const UI = {
     if (langToggles) langToggles.style.display = (tab === 'audit') ? 'none' : '';
     if (tab === 'import') { this.renderDBSummary(); this.renderClearWindows(); }
     if (tab === 'pdm')    { PDM.init(); }
+    if (tab === 'gp12')   { GP12Cruz.render(); }
     if (tab === 'strat')  { Strat.render(); }
     if (tab === 'config') { AuditMode.renderConfigPanel(); }
     if (tab === 'audit')  { AuditMode.render(); }
@@ -6769,6 +6786,236 @@ const PDM = {
       ta.value = txt; document.body.appendChild(ta); ta.select();
       document.execCommand('copy'); document.body.removeChild(ta);
       UI.toast('Resumo PDM copiado!', 'ok');
+    } catch(e) { UI.toast('Falha ao copiar: ' + e.message, 'err'); }
+  }
+};
+
+// ═══════════════════════════════
+// GP12Cruz — Cruzamento Código × Data (Refugo + Produção + Paradas)
+// Porta a lógica já validada em previa_manutencao_scrapiq.js (19 verificações
+// automatizadas em test_previa_manutencao.js). Somente leitura de State.
+// ═══════════════════════════════
+const GP12Cruz = {
+  _lastReportText: '',
+  MOTIVOS_DESTAQUE: ['TE01', 'TE03', 'ST01'],
+
+  _fmtInt(n) { return (n || 0).toLocaleString('pt-BR'); },
+
+  // Código do produto: aceita colar com mais dígitos, trunca aos 7 primeiros
+  // dígitos numéricos — mesmo critério do parser de importação.
+  _parseCodigo(v) { return String(v || '').replace(/\D/g, '').substring(0, 7); },
+
+  // Janela [Data − nDias, Data], inclusive nas duas pontas. nDias negativo ou
+  // não numérico é tratado como 0 (nunca deixa NaN vazar pro cálculo de data).
+  _janela(dataOcorrencia, nDiasRaw) {
+    let n = parseInt(nDiasRaw, 10);
+    if (!Number.isFinite(n) || n < 0) n = 0;
+    const dIni = new Date(dataOcorrencia + 'T00:00:00');
+    dIni.setDate(dIni.getDate() - n);
+    const isoIni = `${dIni.getFullYear()}-${String(dIni.getMonth() + 1).padStart(2, '0')}-${String(dIni.getDate()).padStart(2, '0')}`;
+    return { isoIni, isoFim: dataOcorrencia };
+  },
+
+  _compute(codigo, dataOcorrencia, nDiasRaw) {
+    const { isoIni, isoFim } = this._janela(dataOcorrencia, nDiasRaw);
+    const inJanela = d => !!d && d >= isoIni && d <= isoFim;
+
+    // Bloco 1 — Refugo por dia (State.scrap)
+    const scrapCodigo = (State.scrap || []).filter(r => r.materialCode === codigo && inJanela(r.date));
+    const refugoPorDia = {};
+    scrapCodigo.forEach(r => {
+      if (!refugoPorDia[r.date]) refugoPorDia[r.date] = { produzido: 0, refugo: 0, porDefeito: {} };
+      refugoPorDia[r.date].produzido += r.quantityProduced || 0;
+      refugoPorDia[r.date].refugo += r.defectQty || 0;
+      if (r.defectDesc) refugoPorDia[r.date].porDefeito[r.defectDesc] = (refugoPorDia[r.date].porDefeito[r.defectDesc] || 0) + (r.defectQty || 0);
+    });
+
+    // Bloco 2 — Eventos de produção (State.registros). Plano sempre truncado
+    // (nunca arredondado) pois pode chegar com decimais de fórmula da planilha.
+    const planoInt = r => Math.trunc(r.plano || 0);
+    const registrosCodigo = (State.registros || []).filter(r => r.codigo === codigo && inJanela(r.data))
+      .sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')) || String(a.turno || '').localeCompare(String(b.turno || '')));
+
+    // Bloco 3 — Paradas por motivo, somadas no período (todas, sem filtro de relevância)
+    const stopDescMap = {};
+    (State.stopcodes || []).forEach(sc => { stopDescMap[sc.code] = sc.desc; });
+    const paradasTotais = {};
+    registrosCodigo.forEach(r => {
+      Object.entries(r.paradas || {}).forEach(([code, min]) => {
+        paradasTotais[code] = (paradasTotais[code] || 0) + min;
+      });
+    });
+    const paradasOrdenadas = Object.entries(paradasTotais).filter(([, min]) => min > 0).sort((a, b) => b[1] - a[1]);
+
+    return { isoIni, isoFim, refugoPorDia, registrosCodigo, paradasOrdenadas, stopDescMap, planoInt };
+  },
+
+  render() {
+    const cont = document.getElementById('gp12-content');
+    if (!cont) return;
+
+    const codInput = document.getElementById('gp12-f-codigo');
+    const codigo = this._parseCodigo(codInput?.value || '');
+    if (codInput && codInput.value !== codigo) codInput.value = codigo; // reflete o truncamento no campo
+    const data = document.getElementById('gp12-f-data')?.value || '';
+    const diasRaw = document.getElementById('gp12-f-dias')?.value;
+
+    if (!State.registros || !State.registros.length) {
+      cont.innerHTML = `<div class="empty" style="padding:30px;text-align:center;color:var(--text-muted)">Nenhum dado carregado ainda. Aguarde a sincronização ou vá em Importar Dados.</div>`;
+      this._lastReportText = '';
+      return;
+    }
+
+    if (!codigo || !data) {
+      cont.innerHTML = `<div class="empty" style="padding:30px;text-align:center;color:var(--text-muted)">Informe o Código do Produto e a Data de Ocorrência.</div>`;
+      this._lastReportText = '';
+      return;
+    }
+
+    const { isoIni, isoFim, refugoPorDia, registrosCodigo, paradasOrdenadas, stopDescMap, planoInt } = this._compute(codigo, data, diasRaw);
+
+    let html = `<div style="font-size:11px;color:var(--text-muted);margin-bottom:12px">Período: <b style="color:var(--text)">${isoIni}</b> a <b style="color:var(--text)">${isoFim}</b></div>`;
+
+    // Bloco 1 — Refugo por dia
+    html += `<div class="chart-card chart-grid-full" style="margin-bottom:14px"><div class="chart-title"><span>🔴 Refugo por dia</span></div>`;
+    if (!Object.keys(refugoPorDia).length) {
+      html += `<div class="empty" style="padding:16px;color:var(--text-muted);font-size:12px">Nenhum registro para este código no período.</div>`;
+    } else {
+      html += Object.keys(refugoPorDia).sort().map(dt => {
+        const d = refugoPorDia[dt];
+        const pct = (d.produzido + d.refugo) > 0 ? (d.refugo / (d.produzido + d.refugo) * 100) : 0;
+        const defeitos = Object.entries(d.porDefeito).sort((a, b) => b[1] - a[1])
+          .map(([desc, qtd]) => `<tr style="border-bottom:1px solid var(--border)"><td style="padding:4px 10px 4px 26px;color:var(--text-dim);font-size:11px">${desc}</td><td style="padding:4px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:11px">${this._fmtInt(qtd)}</td></tr>`).join('');
+        return `
+          <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+            <div style="display:flex;gap:16px;align-items:baseline;font-size:12px;flex-wrap:wrap">
+              <b style="color:var(--text)">${dt}</b>
+              <span style="color:var(--text-muted)">Produzido: <b style="color:var(--text)">${this._fmtInt(d.produzido)}</b></span>
+              <span style="color:var(--text-muted)">Refugo: <b style="color:var(--text)">${this._fmtInt(d.refugo)}</b></span>
+              <span style="color:var(--text-muted)">% Refugo: <b style="color:var(--text)">${pct.toFixed(2).replace('.', ',')}%</b></span>
+            </div>
+            <table style="width:100%;border-collapse:collapse;margin-top:6px">${defeitos}</table>
+          </div>`;
+      }).join('');
+    }
+    html += `</div>`;
+
+    // Bloco 2 — Eventos de produção
+    html += `<div class="chart-card chart-grid-full" style="margin-bottom:14px"><div class="chart-title"><span>🏭 Eventos de produção</span></div>`;
+    if (!registrosCodigo.length) {
+      html += `<div class="empty" style="padding:16px;color:var(--text-muted);font-size:12px">Nenhum registro para este código no período.</div>`;
+    } else {
+      const rows = registrosCodigo.map(r => `
+        <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:6px 10px;font-family:'DM Mono',monospace;font-size:11px">${r.data}</td>
+          <td style="padding:6px 10px;font-size:11px">${r.turnoDisp || r.turno || ''}</td>
+          <td style="padding:6px 10px;font-size:11px">${r.maquina || ''}</td>
+          <td style="padding:6px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:11px">${this._fmtInt(planoInt(r))}</td>
+          <td style="padding:6px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:11px">${this._fmtInt(r.realizado)}</td>
+          <td style="padding:6px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:11px">${this._fmtInt(r.refugo)}</td>
+          <td style="padding:6px 10px;font-size:11px;color:var(--text-dim)">${r.comentario || '—'}</td>
+        </tr>`).join('');
+      html += `
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="border-bottom:2px solid var(--border);color:var(--text-muted);text-transform:uppercase;font-size:9px;letter-spacing:.5px">
+            <th style="padding:6px 10px;text-align:left">Data</th>
+            <th style="padding:6px 10px;text-align:left">Turno</th>
+            <th style="padding:6px 10px;text-align:left">Máquina</th>
+            <th style="padding:6px 10px;text-align:right">Plano</th>
+            <th style="padding:6px 10px;text-align:right">Realizado</th>
+            <th style="padding:6px 10px;text-align:right">Refugo</th>
+            <th style="padding:6px 10px;text-align:left">Comentário</th>
+          </tr></thead><tbody>${rows}</tbody>
+        </table>`;
+    }
+    html += `</div>`;
+
+    // Bloco 3 — Paradas por motivo
+    html += `<div class="chart-card chart-grid-full"><div class="chart-title"><span>⏱️ Paradas por motivo (total do período)</span></div>`;
+    if (!paradasOrdenadas.length) {
+      html += `<div class="empty" style="padding:16px;color:var(--text-muted);font-size:12px">Nenhum registro para este código no período.</div>`;
+    } else {
+      const rows = paradasOrdenadas.map(([code, min]) => {
+        const desc = stopDescMap[code] || '(descrição não encontrada)';
+        const destaque = this.MOTIVOS_DESTAQUE.includes(code);
+        return `
+          <tr style="border-bottom:1px solid var(--border);${destaque ? 'background:rgba(245,158,11,.08)' : ''}">
+            <td style="padding:6px 10px;font-family:'DM Mono',monospace;font-size:11px;font-weight:600${destaque ? ';color:#f59e0b' : ''}">${destaque ? '⚠️ ' : ''}${code}</td>
+            <td style="padding:6px 10px;font-size:11px;color:var(--text-dim)">${desc}</td>
+            <td style="padding:6px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:11px">${this._fmtInt(min)} min</td>
+          </tr>`;
+      }).join('');
+      html += `
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="border-bottom:2px solid var(--border);color:var(--text-muted);text-transform:uppercase;font-size:9px;letter-spacing:.5px">
+            <th style="padding:6px 10px;text-align:left">Código</th>
+            <th style="padding:6px 10px;text-align:left">Motivo</th>
+            <th style="padding:6px 10px;text-align:right">Minutos</th>
+          </tr></thead><tbody>${rows}</tbody>
+        </table>`;
+    }
+    html += `</div>`;
+
+    cont.innerHTML = html;
+    this._lastReportText = this._buildText(codigo, isoIni, isoFim, refugoPorDia, registrosCodigo, paradasOrdenadas, stopDescMap, planoInt);
+  },
+
+  // Texto plano no formato já validado em previa_manutencao_scrapiq.js — não
+  // alterar sem necessidade, é colado direto no campo de Causa Raiz do Action Plan.
+  _buildText(codigo, isoIni, isoFim, refugoPorDia, registrosCodigo, paradasOrdenadas, stopDescMap, planoInt) {
+    let texto = `Cruzamento Scrap IQ — Código ${codigo} (${isoIni} a ${isoFim})\n\n`;
+    texto += 'REFUGO:\n';
+    if (!Object.keys(refugoPorDia).length) {
+      texto += '  Nenhum registro no período.\n';
+    } else {
+      Object.keys(refugoPorDia).sort().forEach(dt => {
+        const d = refugoPorDia[dt];
+        const pct = (d.produzido + d.refugo) > 0 ? (d.refugo / (d.produzido + d.refugo) * 100) : 0;
+        texto += `  ${dt} — Produzido: ${d.produzido} | Refugo: ${d.refugo} | % Refugo: ${pct.toFixed(2)}%\n`;
+        Object.entries(d.porDefeito).sort((a, b) => b[1] - a[1]).forEach(([desc, qtd]) => { texto += `     • ${desc}: ${qtd}\n`; });
+      });
+    }
+    texto += '\nEVENTOS DE PRODUÇÃO:\n';
+    if (!registrosCodigo.length) {
+      texto += '  Nenhum registro no período.\n';
+    } else {
+      registrosCodigo.forEach(r => {
+        texto += `  ${r.data} ${r.turnoDisp || r.turno} — Máquina ${r.maquina} — Plano ${planoInt(r)} / Realizado ${r.realizado} / Refugo ${r.refugo}\n`;
+        if (r.comentario) texto += `     Comentário: "${r.comentario}"\n`;
+      });
+    }
+    texto += '\nPARADAS POR MOTIVO (total do período):\n';
+    if (!paradasOrdenadas.length) {
+      texto += '  Nenhuma parada registrada.\n';
+    } else {
+      paradasOrdenadas.forEach(([code, min]) => {
+        const desc = stopDescMap[code] || '(descrição não encontrada)';
+        const destaque = this.MOTIVOS_DESTAQUE.includes(code) ? ' ⚠️ MANUTENÇÃO/SETUP' : '';
+        texto += `  ${code} - ${desc}: ${min} min${destaque}\n`;
+      });
+    }
+    return texto;
+  },
+
+  copyReport() {
+    if (!this._lastReportText) this.render();
+    const txt = this._lastReportText || '';
+    if (!txt.trim()) { UI.toast('Nada para copiar', 'warn'); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(
+        () => UI.toast('Resumo GP12 copiado!', 'ok'),
+        () => this._fallbackCopy(txt)
+      );
+    } else {
+      this._fallbackCopy(txt);
+    }
+  },
+  _fallbackCopy(txt) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = txt; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+      UI.toast('Resumo GP12 copiado!', 'ok');
     } catch(e) { UI.toast('Falha ao copiar: ' + e.message, 'err'); }
   }
 };
