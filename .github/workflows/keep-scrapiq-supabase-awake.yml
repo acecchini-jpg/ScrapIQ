@@ -1,0 +1,15 @@
+name: Keep ScrapIQ Supabase Awake
+
+on:
+  schedule:
+    - cron: '0 12 * * 1'   # toda segunda-feira às 12:00 UTC (09:00 no horário de Brasília)
+  workflow_dispatch:        # permite rodar manualmente também, se quiser testar
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consultar o Supabase (gera atividade)
+        run: |
+          curl -s "https://pdornupeyzeemmeospph.supabase.co/rest/v1/scrapiq_store?select=key&limit=1" \
+            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBkb3JudXBleXplZW1tZW9zcHBoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NDM4ODMsImV4cCI6MjA5OTUxOTg4M30.VLjweTonpCa0PzxmovS5fK5pmM-Y3qmwl7OIRpiIxts"
