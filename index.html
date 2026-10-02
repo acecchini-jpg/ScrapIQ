@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.30 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.31 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.30</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.31</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -3342,8 +3342,8 @@ renderDrilldown(mat, desc, scroll = false) {
     const _oc1 = ocorrs;
     const _copyOcorr1 = () => {
       let txt = I18n.t('ocorr.title') + '\n';
-      txt += [I18n.t('ocorr.col.data'), I18n.t('ocorr.col.turno'), I18n.t('ocorr.col.comentario')].join('\t') + '\n';
-      _oc1.forEach(o => { txt += [o.data||'—', o.turno||'—', o.comentario||'—'].join('\t') + '\n'; });
+      txt += [I18n.t('ocorr.col.data'), I18n.t('ocorr.col.turno'), I18n.t('ocorr.col.maquina'), I18n.t('ocorr.col.comentario')].join('\t') + '\n';
+      _oc1.forEach(o => { txt += [o.data||'—', o.turno||'—', o.maquina||'—', o.comentario||'—'].join('\t') + '\n'; });
       navigator.clipboard.writeText(txt).then(() => UI.toast(I18n.t('ocorr.copy.ok'), 'ok')).catch(() => { const ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); UI.toast(I18n.t('ocorr.copy.ok'), 'ok'); });
     };
     let html = `
@@ -3366,6 +3366,7 @@ renderDrilldown(mat, desc, scroll = false) {
           <div style="display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid var(--border);background:${bg};font-size:12px">
             <span class="fm" style="color:var(--accent);min-width:90px;flex-shrink:0">${o.data || '—'}</span>
             <span style="background:rgba(176,108,255,.12);color:var(--purple);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:600;min-width:30px;text-align:center;flex-shrink:0">${o.turno || '—'}</span>
+            <span class="fm" style="color:var(--text-muted);min-width:60px;flex-shrink:0;font-size:11px">${o.maquina || '—'}</span>
             <span style="color:var(--text-dim);flex:1">${comment}</span>
 
           </div>
@@ -5265,7 +5266,7 @@ const I18n = {
       'drill.empty.eq':'Clique em um equipamento no Pareto','drill.empty.eq.sub':'para ver o histórico detalhado, os produtos e as ocorrências do equipamento',
       'drill.fechar':'✕ Fechar Análise','drill.hist':'Histórico de Refugo do Item','drill.def':'Principais Defeitos',
       'ocorr.title':'Ocorrências do Plano de Produção','ocorr.title.eq':'Ocorrências do Plano de Produção — Produtos deste Equipamento',
-      'ocorr.col.data':'Data','ocorr.col.turno':'Turno','ocorr.col.produto':'Produto','ocorr.col.comentario':'Comentário',
+      'ocorr.col.data':'Data','ocorr.col.turno':'Turno','ocorr.col.maquina':'Máquina','ocorr.col.produto':'Produto','ocorr.col.comentario':'Comentário',
       'ocorr.empty.prod':'Nenhuma ocorrência registrada para este produto no período selecionado',
       'ocorr.empty.eq':'Nenhuma ocorrência registrada para os produtos deste equipamento no período',
       'ocorr.copy':'🤖 Copiar para IA','ocorr.copy.ok':'Copiado para a área de transferência!',
@@ -5340,7 +5341,7 @@ const I18n = {
       'drill.empty.eq':'Click an equipment in the Pareto','drill.empty.eq.sub':'to see detailed history, products and equipment occurrences',
       'drill.fechar':'✕ Close Analysis','drill.hist':'Item Scrap History','drill.def':'Main Defects',
       'ocorr.title':'Production Plan Occurrences','ocorr.title.eq':'Production Plan Occurrences — Products of this Equipment',
-      'ocorr.col.data':'Date','ocorr.col.turno':'Shift','ocorr.col.produto':'Product','ocorr.col.comentario':'Comment',
+      'ocorr.col.data':'Date','ocorr.col.turno':'Shift','ocorr.col.maquina':'Machine','ocorr.col.produto':'Product','ocorr.col.comentario':'Comment',
       'ocorr.empty.prod':'No occurrences recorded for this product in the selected period',
       'ocorr.empty.eq':'No occurrences recorded for the products of this equipment in the period',
       'ocorr.copy':'🤖 Copy for AI','ocorr.copy.ok':'Copied to clipboard!',
@@ -5415,7 +5416,7 @@ const I18n = {
       'drill.empty.eq':'Haga clic en un equipo en el Pareto','drill.empty.eq.sub':'para ver el historial detallado, los productos y las ocurrencias del equipo',
       'drill.fechar':'✕ Cerrar Análisis','drill.hist':'Historial de Scrap del Ítem','drill.def':'Principales Defectos',
       'ocorr.title':'Ocurrencias del Plan de Producción','ocorr.title.eq':'Ocurrencias del Plan de Producción — Productos de este Equipo',
-      'ocorr.col.data':'Fecha','ocorr.col.turno':'Turno','ocorr.col.produto':'Producto','ocorr.col.comentario':'Comentario',
+      'ocorr.col.data':'Fecha','ocorr.col.turno':'Turno','ocorr.col.maquina':'Máquina','ocorr.col.produto':'Producto','ocorr.col.comentario':'Comentario',
       'ocorr.empty.prod':'Ninguna ocurrencia registrada para este producto en el período seleccionado',
       'ocorr.empty.eq':'Ninguna ocurrencia registrada para los productos de este equipo en el período',
       'ocorr.copy':'🤖 Copiar para IA','ocorr.copy.ok':'¡Copiado al portapapeles!',
