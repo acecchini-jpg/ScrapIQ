@@ -2,7 +2,7 @@ name: Keep ScrapIQ Supabase Awake
 
 on:
   schedule:
-    - cron: '0 12 * * 1'   # toda segunda-feira às 12:00 UTC (09:00 no horário de Brasília)
+    - cron: '0 12 * * 1,4'   # segunda E quinta às 12:00 UTC (09:00 em Brasília)
   workflow_dispatch:        # permite rodar manualmente também, se quiser testar
 
 jobs:
