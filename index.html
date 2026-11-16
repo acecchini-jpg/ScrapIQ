@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.34 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.35 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.34</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.35</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -456,6 +456,7 @@ main{flex:1;display:flex;flex-direction:column}
         <option value="cost">Custo</option>
         <option value="pct">% Scrap</option>
       </select>
+      <label style="margin-left:8px;display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text);cursor:pointer"><input type="checkbox" id="pr-f-sum" onchange="PlanoRef.render()"><span data-i18n="pr.sumrank">Soma dos Rankings</span></label>
       <button onclick="PlanoRef.render()" style="margin-left:8px;padding:7px 16px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.45);border-radius:6px;color:#3b82f6;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif">🔍 Buscar</button>
       <button onclick="PlanoRef.copyReport()" style="margin-left:auto;padding:7px 16px;background:rgba(34,201,151,.12);border:1px solid rgba(34,201,151,.45);border-radius:6px;color:#22c997;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s" onmouseover="this.style.background='rgba(34,201,151,.22)'" onmouseout="this.style.background='rgba(34,201,151,.12)'">📋 Copiar Resumo</button>
     </div>
@@ -5276,7 +5277,7 @@ const I18n = {
   _lang: 'pt',
   _dict: {
     pt: {
-      'tab.dashboard':'Dashboard','tab.dasheq':'Por Equipamento','tab.pdm':'Resumo PDM','tab.import':'Importar Dados','tab.config':'Configurações','tab.audit':'Modo Auditoria',
+      'tab.dashboard':'Dashboard','tab.dasheq':'Por Equipamento','tab.pdm':'Resumo PDM','tab.import':'Importar Dados','tab.config':'Configurações','tab.audit':'Modo Auditoria','pr.sumrank':'Soma dos Rankings','pr.sum':'Soma','pr.product':'Produto',
       'filter.periodo':'Período','filter.agrupar':'Agrupar por','filter.metrica':'Métrica','filter.turnos':'Turnos','filter.limpar':'✕ Limpar Filtros',
       'scope.year':'Anual','scope.month':'Mensal','scope.week':'Semanal','scope.day':'Diário',
       'metric.cost':'Custo R$','metric.qty':'Qtd','metric.pct':'Índice %',
@@ -5351,7 +5352,7 @@ const I18n = {
       'header.analyser':'Analyser'
     },
     en: {
-      'tab.dashboard':'Dashboard','tab.dasheq':'By Equipment','tab.pdm':'PDM Summary','tab.import':'Import Data','tab.config':'Settings','tab.audit':'Audit Mode',
+      'tab.dashboard':'Dashboard','tab.dasheq':'By Equipment','tab.pdm':'PDM Summary','tab.import':'Import Data','tab.config':'Settings','tab.audit':'Audit Mode','pr.sumrank':'Sum of Rankings','pr.sum':'Sum','pr.product':'Product',
       'filter.periodo':'Period','filter.agrupar':'Group by','filter.metrica':'Metric','filter.turnos':'Shifts','filter.limpar':'✕ Clear Filters',
       'scope.year':'Yearly','scope.month':'Monthly','scope.week':'Weekly','scope.day':'Daily',
       'metric.cost':'Cost $','metric.qty':'Qty','metric.pct':'Index %',
@@ -5426,7 +5427,7 @@ const I18n = {
       'header.analyser':'Analyser'
     },
     es: {
-      'tab.dashboard':'Dashboard','tab.dasheq':'Por Equipo','tab.pdm':'Resumen PDM','tab.import':'Importar Datos','tab.config':'Configuración','tab.audit':'Modo Auditoría',
+      'tab.dashboard':'Dashboard','tab.dasheq':'Por Equipo','tab.pdm':'Resumen PDM','tab.import':'Importar Datos','tab.config':'Configuración','tab.audit':'Modo Auditoría','pr.sumrank':'Suma de Rankings','pr.sum':'Suma','pr.product':'Producto',
       'filter.periodo':'Período','filter.agrupar':'Agrupar por','filter.metrica':'Métrica','filter.turnos':'Turnos','filter.limpar':'✕ Limpiar Filtros',
       'scope.year':'Anual','scope.month':'Mensual','scope.week':'Semanal','scope.day':'Diario',
       'metric.cost':'Costo $','metric.qty':'Cant.','metric.pct':'Índice %',
@@ -5541,6 +5542,7 @@ const I18n = {
     try { if (State.scrap && State.scrap.length) { UI._initFilters(); Dashboard.renderTemporal(); Dashboard.renderShiftDist(); Dashboard.renderPareto(); } } catch(e) {}
     try { if (typeof DashEq !== 'undefined' && DashEq._initialized) { DashEq._initFilters(); DashEq.renderTemporal(); DashEq.renderShiftDist(); DashEq.renderPareto(); } } catch(e) {}
     try { if (typeof PDM !== 'undefined' && document.getElementById('pdm-f-date')?.value) PDM.render(); } catch(e) {}
+    try { if (typeof PlanoRef !== 'undefined' && document.getElementById('pr-f-mes')?.value && document.getElementById('view-planoref')?.classList.contains('active')) PlanoRef.render(); } catch(e) {}
     try { if (typeof UI !== 'undefined') UI.renderDBSummary(); } catch(e) {}
   },
 
@@ -7195,9 +7197,36 @@ const PlanoRef = {
       desc: descs[e.code] || (costs[e.code] && costs[e.code].materialDesc) || '',
       semCusto: !(costs[e.code] && costs[e.code].unitCost > 0)
     }));
-    return { months, perMonth, top, maxPct, totalItens: list.length };
+    return { months, perMonth, top, maxPct, nItens, descs, costs, totalItens: list.length };
   },
 
+  // Modo "Soma dos Rankings": soma das posições (na prioridade escolhida) mês a mês; menor soma = pior.
+  // Mês ausente (sem refugo / ignorado pelo filtro de %) = penalidade (nº de itens ranqueados no mês + 1).
+  _computeSum(res, prio) {
+    const rk = pm => ({ qty: pm.rQty, cost: pm.rCost, pct: pm.rPct }[prio] || pm.rQty);
+    const codes = new Set();
+    res.months.forEach(m => res.perMonth[m].byCode.forEach((e, c) => codes.add(c)));
+    const lastM = res.months[res.months.length - 1];
+    const rows = [];
+    codes.forEach(code => {
+      let sum = 0; const cells = {};
+      res.months.forEach(m => {
+        const pm = res.perMonth[m], e = pm.byCode.get(code);
+        if (e) { cells[m] = { e, pos: rk(pm).get(code), pen: false }; }
+        else { cells[m] = { e: null, pos: pm.byCode.size + 1, pen: true }; }
+        sum += cells[m].pos;
+      });
+      const desc = res.descs[code] || (res.costs[code] && res.costs[code].materialDesc) || '';
+      rows.push({ code, desc, sum, cells, lastPos: cells[lastM].pos });
+    });
+    rows.sort((a, b) => (a.sum - b.sum) || (a.lastPos - b.lastPos) || a.code.localeCompare(b.code));
+    return rows.slice(0, res.nItens);
+  },
+  _cellTxt(c, prio) {
+    if (!c.e) return '— [' + c.pos + ']';
+    const v = prio === 'cost' ? this._brl(c.e.cost) : prio === 'pct' ? this._pct(c.e.pct) : this._int(c.e.def) + ' ' + 'peças';
+    return v + ' [' + c.pos + ']';
+  },
   _mesLbl(m, multiAno) {
     const [y, mm] = m.split('-').map(Number);
     return this.MESES[mm - 1] + (multiAno ? '/' + y : '');
@@ -7225,6 +7254,16 @@ const PlanoRef = {
     return txt.replace(/\n+$/, '\n');
   },
 
+  _buildTextSum(rows, res, prio) {
+    const multiAno = new Set(res.months.map(m => m.slice(0, 4))).size > 1;
+    const ms = res.months.slice().reverse();
+    let t = [I18n.t('pr.product')].concat(ms.map(m => this._mesLbl(m, multiAno))).concat([I18n.t('pr.sum')]).join('\t') + '\n';
+    rows.forEach(r => {
+      t += [(r.desc || '(?)') + ' (' + r.code + ')'].concat(ms.map(m => this._cellTxt(r.cells[m], prio))).concat([r.sum]).join('\t') + '\n';
+    });
+    return t;
+  },
+
   render() {
     this._init();
     const box = document.getElementById('pr-content');
@@ -7242,6 +7281,19 @@ const PlanoRef = {
     const [sy, sm] = ym.split('-').map(Number);
     const janela = this._mesLbl(res.months[0], multiAno) + (res.months.length > 1 ? ' a ' + this._mesLbl(res.months[res.months.length - 1], multiAno) : '');
     const head = `Fechamento de ${this.MESES[sm - 1]}/${sy} · dados de ${janela} · ranking de ${this._mesLbl(res.months[res.months.length - 1], multiAno)} · prioridade: ${this.PRIO_LBL[prio] || 'Quantidade'} · ${res.totalItens} itens com refugo em ${this._mesLbl(res.months[res.months.length - 1], multiAno)}`;
+    if (document.getElementById('pr-f-sum') && document.getElementById('pr-f-sum').checked) {
+      const rows = this._computeSum(res, prio);
+      this._lastText = this._buildTextSum(rows, res, prio);
+      const ms = res.months.slice().reverse();
+      const th = 'padding:6px 10px;text-align:left;border-bottom:1px solid var(--border2);font-size:11px;color:var(--text-muted);white-space:nowrap';
+      const td = 'padding:6px 10px;border-bottom:1px solid var(--border);font-family:\'DM Mono\',monospace;font-size:12px;white-space:nowrap';
+      box.innerHTML = `<div class="chart-card chart-grid-full"><div class="chart-title">${this._esc(head)} · ${this._esc(I18n.t('pr.sumrank'))}</div>
+        <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%"><thead><tr><th style="${th}">${this._esc(I18n.t('pr.product'))}</th>${ms.map(m => `<th style="${th}">${this._esc(this._mesLbl(m, multiAno))}</th>`).join('')}<th style="${th}">${this._esc(I18n.t('pr.sum'))}</th></tr></thead><tbody>
+        ${rows.map(r => `<tr><td style="${td};font-family:Inter,sans-serif">${this._esc(r.desc || '(?)')} (${this._esc(r.code)})</td>${ms.map(m => `<td style="${td}${r.cells[m].pen ? ';color:var(--text-muted)' : ''}">${this._esc(this._cellTxt(r.cells[m], prio))}</td>`).join('')}<td style="${td};font-weight:700">${r.sum}</td></tr>`).join('')}
+        </tbody></table></div></div>`;
+      if (!rows.length) box.innerHTML = `<div class="chart-card chart-grid-full"><div class="chart-title">${this._esc(head)}</div><div style="color:var(--text-muted);font-size:12px">—</div></div>`;
+      return;
+    }
     this._lastText = this._buildText(res, prio);
     if (!res.top.length) {
       box.innerHTML = `<div class="chart-card chart-grid-full"><div class="chart-title">${this._esc(head)}</div><div style="color:var(--text-muted);font-size:12px">Nenhum item com refugo no último mês da janela.</div></div>`;
