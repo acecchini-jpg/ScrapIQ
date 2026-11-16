@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.31 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.32 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.31</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.32</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -222,6 +222,7 @@ main{flex:1;display:flex;flex-direction:column}
   <button class="tab-btn" data-tab="strat" onclick="UI.switchTab('strat')" data-i18n="tab.strat">Estratificação</button>
   <button class="tab-btn" data-tab="pdm" onclick="UI.switchTab('pdm')" data-i18n="tab.pdm">Resumo PDM</button>
   <button class="tab-btn" data-tab="gp12" onclick="UI.switchTab('gp12')">Cruzamento GP12</button>
+  <button class="tab-btn" data-tab="planoref" onclick="UI.switchTab('planoref')">Plano de Ação</button>
   <button class="tab-btn admin-tab" data-tab="import" onclick="UI.switchTab('import')" style="display:none" data-i18n="tab.import">Importar Dados</button>
   <button class="tab-btn admin-tab" data-tab="config" onclick="UI.switchTab('config')" style="display:none" data-i18n="tab.config">Configurações</button>
   <button class="tab-btn audit-tab" data-tab="audit" onclick="UI.switchTab('audit')" style="display:none">Refugo</button>
@@ -437,6 +438,30 @@ main{flex:1;display:flex;flex-direction:column}
   </div>
 
   <div id="gp12-content" style="margin-top:14px"></div>
+</div><div id="view-planoref" class="tab-view">
+  <div class="filter-bar">
+    <div class="filter-row">
+      <span class="flabel">Mês de fechamento</span>
+      <input type="month" class="finput" id="pr-f-mes" onchange="PlanoRef.render()">
+      <span class="flabel" style="margin-left:8px">Nº de meses a trazer os dados</span>
+      <input type="number" class="finput" id="pr-f-meses" min="1" max="24" value="6" style="width:60px" onchange="PlanoRef.render()">
+      <span class="flabel" style="margin-left:8px">Nº de itens a analisar</span>
+      <input type="number" class="finput" id="pr-f-itens" min="1" max="100" value="3" style="width:60px" onchange="PlanoRef.render()">
+      <span class="flabel" style="margin-left:8px">Ignorar % de refugo acima de</span>
+      <input type="number" class="finput" id="pr-f-maxpct" min="0" max="100" step="1" value="90" style="width:60px" onchange="PlanoRef.render()">
+      <span style="font-size:12px;color:var(--text-muted)">%</span>
+      <span class="flabel" style="margin-left:8px">Priorizar por</span>
+      <select class="fselect" id="pr-f-prio" onchange="PlanoRef.render()">
+        <option value="qty" selected>Quantidade</option>
+        <option value="cost">Custo</option>
+        <option value="pct">% Scrap</option>
+      </select>
+      <button onclick="PlanoRef.render()" style="margin-left:8px;padding:7px 16px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.45);border-radius:6px;color:#3b82f6;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif">🔍 Buscar</button>
+      <button onclick="PlanoRef.copyReport()" style="margin-left:auto;padding:7px 16px;background:rgba(34,201,151,.12);border:1px solid rgba(34,201,151,.45);border-radius:6px;color:#22c997;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s" onmouseover="this.style.background='rgba(34,201,151,.22)'" onmouseout="this.style.background='rgba(34,201,151,.12)'">📋 Copiar Resumo</button>
+    </div>
+  </div>
+
+  <div id="pr-content" style="margin-top:14px"></div>
 </div><div id="view-strat" class="tab-view">
 
   <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:9px 16px;margin-bottom:14px;display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-muted)">
@@ -3423,6 +3448,7 @@ const UI = {
     if (tab === 'import') { this.renderDBSummary(); this.renderClearWindows(); }
     if (tab === 'pdm')    { PDM.init(); }
     if (tab === 'gp12')   { GP12Cruz.render(); }
+    if (tab === 'planoref') { PlanoRef.render(); }
     if (tab === 'strat')  { Strat.render(); }
     if (tab === 'config') { AuditMode.renderConfigPanel(); }
     if (tab === 'audit')  { AuditMode.render(); }
@@ -7075,6 +7101,179 @@ const GP12Cruz = {
       document.execCommand('copy'); document.body.removeChild(ta);
       UI.toast('Resumo GP12 copiado!', 'ok');
     } catch(e) { UI.toast('Falha ao copiar: ' + e.message, 'err'); }
+  }
+};
+
+// ═══════════════════════════════
+// v12.32 — PLANO DE AÇÃO DE REFUGO (resumo mensal p/ reunião de fechamento)
+// Módulo isolado: somente leitura de State.scrap / State.costs.
+// Mês selecionado = mês da reunião; os dados vêm dos N meses ANTERIORES a ele.
+// Filtro de % aplicado por item+mês (mês acima do limite é descartado).
+// ═══════════════════════════════
+const PlanoRef = {
+  _lastText: '',
+  MESES: ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'],
+  PRIO_LBL: { qty: 'Quantidade', cost: 'Custo', pct: '% Scrap' },
+
+  _int(n) { return Math.round(n || 0).toLocaleString('pt-BR'); },
+  _pct(n) { return (n || 0).toFixed(2).replace('.', ',') + '%'; },
+  _brl(n) { return 'R$ ' + Math.round(n || 0).toLocaleString('pt-BR'); },
+  _esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); },
+
+  // Posição (empate compartilha a mesma posição): 1 + qtde de itens estritamente maiores
+  _rankMap(entries, valFn) {
+    const vals = entries.map(e => valFn(e));
+    const m = new Map();
+    entries.forEach((e, i) => {
+      let gt = 0;
+      for (let j = 0; j < vals.length; j++) if (vals[j] > vals[i]) gt++;
+      m.set(e.code, gt + 1);
+    });
+    return m;
+  },
+
+  _init() {
+    const el = document.getElementById('pr-f-mes');
+    if (el && !el.value) {
+      const d = new Date();
+      el.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    }
+  },
+
+  // Núcleo puro (sem DOM) — testável. params: {ym:'YYYY-MM', nMeses, nItens, maxPct, prio}
+  _compute(params, scrap, costs) {
+    const { ym, prio } = params;
+    const nMeses = Math.max(1, parseInt(params.nMeses, 10) || 1);
+    const nItens = Math.max(1, parseInt(params.nItens, 10) || 1);
+    const maxPct = (params.maxPct === '' || params.maxPct == null || isNaN(parseFloat(params.maxPct))) ? 100 : parseFloat(params.maxPct);
+    const [sy, sm] = ym.split('-').map(Number);
+    // janela: N meses anteriores ao selecionado, em ordem cronológica
+    const months = [];
+    for (let k = nMeses; k >= 1; k--) {
+      const t = (sy * 12 + (sm - 1)) - k;
+      months.push(String(Math.floor(t / 12)) + '-' + String((t % 12) + 1).padStart(2, '0'));
+    }
+    const inWin = new Set(months);
+    // agregação por mês → item
+    const agg = {}; months.forEach(m => agg[m] = {});
+    const descs = {};
+    scrap.forEach(r => {
+      const m = String(r.date || '').slice(0, 7);
+      if (!inWin.has(m) || !r.materialCode) return;
+      const a = agg[m][r.materialCode] || (agg[m][r.materialCode] = { def: 0, good: 0 });
+      a.def += r.defectQty || 0;
+      a.good += r.quantityProduced || 0;
+      if (r.materialDesc) descs[r.materialCode] = r.materialDesc;
+    });
+    const uc = c => (costs[c] && costs[c].unitCost) || 0;
+    // por mês: entradas válidas (def>0 e %<=limite) e ranks
+    const perMonth = {};
+    months.forEach(m => {
+      const all = Object.keys(agg[m]).map(code => {
+        const a = agg[m][code];
+        const tot = a.def + a.good;
+        return { code, def: a.def, good: a.good, pct: tot > 0 ? a.def / tot * 100 : 0, cost: a.def * uc(code) };
+      }).filter(e => e.def > 0);
+      const valid = all.filter(e => e.pct <= maxPct);
+      const ignored = new Map(all.filter(e => e.pct > maxPct).map(e => [e.code, e]));
+      const byCode = new Map(valid.map(e => [e.code, e]));
+      perMonth[m] = {
+        byCode, ignored,
+        rPct: this._rankMap(valid, e => e.pct),
+        rCost: this._rankMap(valid, e => e.cost),
+        rQty: this._rankMap(valid, e => e.def)
+      };
+    });
+    // total na janela (só meses válidos de cada item)
+    const tot = {};
+    months.forEach(m => perMonth[m].byCode.forEach((e, code) => {
+      const t = tot[code] || (tot[code] = { code, def: 0, good: 0, cost: 0 });
+      t.def += e.def; t.good += e.good; t.cost += e.cost;
+    }));
+    const list = Object.values(tot).map(t => ({ ...t, pct: (t.def + t.good) > 0 ? t.def / (t.def + t.good) * 100 : 0 }));
+    const key = { qty: e => e.def, cost: e => e.cost, pct: e => e.pct }[prio] || (e => e.def);
+    list.sort((a, b) => (key(b) - key(a)) || a.code.localeCompare(b.code));
+    const ranks = this._rankMap(list, key);
+    const top = list.slice(0, nItens).map((e, i) => ({
+      ...e, pos: ranks.get(e.code), seq: i + 1,
+      desc: descs[e.code] || (costs[e.code] && costs[e.code].materialDesc) || '',
+      semCusto: !(costs[e.code] && costs[e.code].unitCost > 0)
+    }));
+    return { months, perMonth, top, maxPct, totalItens: list.length };
+  },
+
+  _mesLbl(m, multiAno) {
+    const [y, mm] = m.split('-').map(Number);
+    return this.MESES[mm - 1] + (multiAno ? '/' + y : '');
+  },
+
+  _buildText(res, prio) {
+    const multiAno = new Set(res.months.map(m => m.slice(0, 4))).size > 1;
+    let txt = '';
+    res.top.forEach(it => {
+      txt += `#${String(it.seq).padStart(2, '0')} - ${it.desc || '(sem descrição)'} (${it.code})\n`;
+      res.months.forEach(m => {
+        const pm = res.perMonth[m], lbl = this._mesLbl(m, multiAno);
+        const e = pm.byCode.get(it.code);
+        if (e) {
+          txt += `Índice de Scrap em ${lbl} = ${this._pct(e.pct)} [${pm.rPct.get(it.code)}] / ${this._brl(e.cost)} [${pm.rCost.get(it.code)}] / ${this._int(e.def)} peças [${pm.rQty.get(it.code)}]\n`;
+        } else if (pm.ignored.has(it.code)) {
+          const g = pm.ignored.get(it.code);
+          txt += `Índice de Scrap em ${lbl} = ignorado (${this._pct(g.pct)} > ${String(res.maxPct).replace('.', ',')}%, ${this._int(g.def)} peças)\n`;
+        } else {
+          txt += `Índice de Scrap em ${lbl} = sem refugo\n`;
+        }
+      });
+      txt += '\n';
+    });
+    return txt.replace(/\n+$/, '\n');
+  },
+
+  render() {
+    this._init();
+    const box = document.getElementById('pr-content');
+    if (!box) return;
+    const ym = document.getElementById('pr-f-mes').value;
+    const prio = document.getElementById('pr-f-prio').value;
+    if (!ym) { box.innerHTML = '<div style="color:var(--text-muted);font-size:12px">Selecione o mês de fechamento.</div>'; this._lastText = ''; return; }
+    const res = this._compute({
+      ym, prio,
+      nMeses: document.getElementById('pr-f-meses').value,
+      nItens: document.getElementById('pr-f-itens').value,
+      maxPct: document.getElementById('pr-f-maxpct').value
+    }, State.scrap, State.costs);
+    const multiAno = new Set(res.months.map(m => m.slice(0, 4))).size > 1;
+    const [sy, sm] = ym.split('-').map(Number);
+    const janela = this._mesLbl(res.months[0], multiAno) + (res.months.length > 1 ? ' a ' + this._mesLbl(res.months[res.months.length - 1], multiAno) : '');
+    const head = `Fechamento de ${this.MESES[sm - 1]}/${sy} · dados de ${janela} · prioridade: ${this.PRIO_LBL[prio] || 'Quantidade'} · ${res.totalItens} itens com refugo na janela`;
+    this._lastText = this._buildText(res, prio);
+    if (!res.top.length) {
+      box.innerHTML = `<div class="chart-card chart-grid-full"><div class="chart-title">${this._esc(head)}</div><div style="color:var(--text-muted);font-size:12px">Nenhum item com refugo na janela selecionada.</div></div>`;
+      return;
+    }
+    const semCusto = res.top.filter(i => i.semCusto);
+    const aviso = semCusto.length
+      ? `<div style="margin-top:10px;font-size:11px;color:#f59e0b">⚠ Sem custo cadastrado (R$ 0): ${semCusto.map(i => this._esc(i.code)).join(', ')}</div>` : '';
+    box.innerHTML = `<div class="chart-card chart-grid-full"><div class="chart-title">${this._esc(head)}</div>
+      <pre id="pr-text" style="font-family:'DM Mono',monospace;font-size:12px;line-height:1.7;white-space:pre-wrap;margin:0;color:var(--text)">${this._esc(this._lastText)}</pre>${aviso}</div>`;
+  },
+
+  copyReport() {
+    if (!this._lastText) this.render();
+    const txt = this._lastText || '';
+    if (!txt.trim()) { UI.toast('Nada para copiar', 'warn'); return; }
+    const ok = () => UI.toast('Resumo do Plano de Ação copiado!', 'ok');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(ok, () => this._fallbackCopy(txt));
+    } else this._fallbackCopy(txt);
+  },
+  _fallbackCopy(txt) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = txt; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+      UI.toast('Resumo do Plano de Ação copiado!', 'ok');
+    } catch (e) { UI.toast('Falha ao copiar: ' + e.message, 'err'); }
   }
 };
 
