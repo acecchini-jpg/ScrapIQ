@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScrapIQ v12.32 — Gestão de Refugo Industrial</title>
+<title>ScrapIQ v12.33 — Gestão de Refugo Industrial</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -187,7 +187,7 @@ main{flex:1;display:flex;flex-direction:column}
 
 <div id="wrap">
 <header>
-  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.32</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
+  <div class="logo">Scrap<span>IQ</span> <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;font-weight:400">v12.33</span> <span id="supa-hdr" style="display:none;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#3ecf8e;background:rgba(62,207,142,.12);border-radius:12px;padding:2px 8px;margin-left:6px">☁ NUVEM</span></div>
   <div class="statusbar">
     <div class="sdot" id="d-cost"></div><span id="s-cost" data-i18n="status.cost.init">Custo —</span>
     <span style="color:var(--border2)">│</span>
@@ -7184,18 +7184,14 @@ const PlanoRef = {
         rQty: this._rankMap(valid, e => e.def)
       };
     });
-    // total na janela (só meses válidos de cada item)
-    const tot = {};
-    months.forEach(m => perMonth[m].byCode.forEach((e, code) => {
-      const t = tot[code] || (tot[code] = { code, def: 0, good: 0, cost: 0 });
-      t.def += e.def; t.good += e.good; t.cost += e.cost;
-    }));
-    const list = Object.values(tot).map(t => ({ ...t, pct: (t.def + t.good) > 0 ? t.def / (t.def + t.good) * 100 : 0 }));
+    // ranking = último mês da janela (mês anterior ao de fechamento), na prioridade escolhida
+    const last = perMonth[months[months.length - 1]];
+    const list = Array.from(last.byCode.values());
     const key = { qty: e => e.def, cost: e => e.cost, pct: e => e.pct }[prio] || (e => e.def);
     list.sort((a, b) => (key(b) - key(a)) || a.code.localeCompare(b.code));
-    const ranks = this._rankMap(list, key);
+    const rk = { qty: last.rQty, cost: last.rCost, pct: last.rPct }[prio] || last.rQty;
     const top = list.slice(0, nItens).map((e, i) => ({
-      ...e, pos: ranks.get(e.code), seq: i + 1,
+      ...e, pos: rk.get(e.code), seq: i + 1,
       desc: descs[e.code] || (costs[e.code] && costs[e.code].materialDesc) || '',
       semCusto: !(costs[e.code] && costs[e.code].unitCost > 0)
     }));
@@ -7211,7 +7207,7 @@ const PlanoRef = {
     const multiAno = new Set(res.months.map(m => m.slice(0, 4))).size > 1;
     let txt = '';
     res.top.forEach(it => {
-      txt += `#${String(it.seq).padStart(2, '0')} - ${it.desc || '(sem descrição)'} (${it.code})\n`;
+      txt += `#${String(it.pos).padStart(2, '0')} - ${it.desc || '(sem descrição)'} (${it.code})\n`;
       res.months.forEach(m => {
         const pm = res.perMonth[m], lbl = this._mesLbl(m, multiAno);
         const e = pm.byCode.get(it.code);
@@ -7245,10 +7241,10 @@ const PlanoRef = {
     const multiAno = new Set(res.months.map(m => m.slice(0, 4))).size > 1;
     const [sy, sm] = ym.split('-').map(Number);
     const janela = this._mesLbl(res.months[0], multiAno) + (res.months.length > 1 ? ' a ' + this._mesLbl(res.months[res.months.length - 1], multiAno) : '');
-    const head = `Fechamento de ${this.MESES[sm - 1]}/${sy} · dados de ${janela} · prioridade: ${this.PRIO_LBL[prio] || 'Quantidade'} · ${res.totalItens} itens com refugo na janela`;
+    const head = `Fechamento de ${this.MESES[sm - 1]}/${sy} · dados de ${janela} · ranking de ${this._mesLbl(res.months[res.months.length - 1], multiAno)} · prioridade: ${this.PRIO_LBL[prio] || 'Quantidade'} · ${res.totalItens} itens com refugo em ${this._mesLbl(res.months[res.months.length - 1], multiAno)}`;
     this._lastText = this._buildText(res, prio);
     if (!res.top.length) {
-      box.innerHTML = `<div class="chart-card chart-grid-full"><div class="chart-title">${this._esc(head)}</div><div style="color:var(--text-muted);font-size:12px">Nenhum item com refugo na janela selecionada.</div></div>`;
+      box.innerHTML = `<div class="chart-card chart-grid-full"><div class="chart-title">${this._esc(head)}</div><div style="color:var(--text-muted);font-size:12px">Nenhum item com refugo no último mês da janela.</div></div>`;
       return;
     }
     const semCusto = res.top.filter(i => i.semCusto);
